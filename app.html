@@ -61,12 +61,12 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
   <p class="sub">Easy Core Cut General Contracting</p>
 
   <!-- LOGIN -->
-  <div id="login" class="card">
-    <input id="email" type="email" placeholder="Email" autocomplete="username">
-    <input id="pass" type="password" placeholder="Password" autocomplete="current-password">
-    <button id="btnLogin">Login</button>
+  <form id="login" class="card" method="post" action="#">
+    <input id="email" name="email" type="email" placeholder="Email" autocomplete="username" required>
+    <input id="pass" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button id="btnLogin" type="submit">Login</button>
     <p id="msg" class="msg"></p>
-  </div>
+  </form>
 
   <!-- APP -->
   <div id="app" hidden>
@@ -610,7 +610,8 @@ async function show() {
   loadJobs(); loadReports(); loadMoney();
 }
 
-$('btnLogin').onclick = async () => {
+$('login').onsubmit = async (e) => {
+  e.preventDefault();
   setMsg('msg', 'Please wait...', true);
   const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pass').value });
   setMsg('msg', error ? 'Wrong email or password' : '');
