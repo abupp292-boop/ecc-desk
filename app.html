@@ -7,19 +7,34 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
 body{margin:0;font-family:Arial,sans-serif;background:#1a1a2e;color:#fff;min-height:100vh}
-.wrap{max-width:420px;margin:0 auto;padding:32px 16px}
-.logo{font-size:3rem;text-align:center}
-h1{color:#00d4aa;text-align:center;margin:8px 0 4px}
-.sub{color:#aaa;text-align:center;margin:0 0 24px}
-.card{background:#24243e;border-radius:14px;padding:20px}
-input{width:100%;box-sizing:border-box;padding:14px;margin-bottom:12px;border:1px solid #444;border-radius:10px;background:#1a1a2e;color:#fff;font-size:16px}
+.wrap{max-width:480px;margin:0 auto;padding:24px 16px 48px}
+.logo{font-size:2.6rem;text-align:center}
+h1{color:#00d4aa;text-align:center;margin:6px 0 2px}
+h2{margin:18px 0 10px;font-size:1.2rem}
+.sub{color:#aaa;text-align:center;margin:0 0 20px}
+.card{background:#24243e;border-radius:14px;padding:18px;margin-bottom:14px}
+input,select,textarea{width:100%;box-sizing:border-box;padding:13px;margin-bottom:10px;border:1px solid #444;border-radius:10px;background:#1a1a2e;color:#fff;font-size:16px;font-family:inherit}
+label{display:block;font-size:13px;color:#aaa;margin-bottom:4px}
 button{width:100%;padding:14px;border:0;border-radius:10px;background:#00d4aa;color:#1a1a2e;font-size:16px;font-weight:bold}
 .ghost{width:auto;padding:8px 14px;background:transparent;color:#00d4aa;border:1px solid #00d4aa}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.msg{color:#ff8080;text-align:center;min-height:20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.msg{color:#ff8080;text-align:center;min-height:20px;margin:6px 0 0}
+.ok{color:#00d4aa}
+.tabs{display:flex;gap:6px;margin:14px 0}
+.tabs button{background:#24243e;color:#aaa;padding:12px 4px;font-size:15px}
+.tabs button.on{background:#00d4aa;color:#1a1a2e}
 ul{list-style:none;padding:0;margin:0}
-li{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #333}
-.role{color:#00d4aa;font-size:13px}
+li{padding:12px 0;border-bottom:1px solid #333}
+.li-row{display:flex;justify-content:space-between;gap:8px}
+.small{color:#aaa;font-size:13px;margin-top:4px}
+.tag{color:#00d4aa;font-size:13px;white-space:nowrap}
+.money{font-variant-numeric:tabular-nums;white-space:nowrap}
+.totals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.totals div{background:#1a1a2e;border-radius:10px;padding:10px 4px}
+.totals b{display:block;color:#00d4aa;font-size:15px;margin-top:4px}
+details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
+.st-pending{color:#ffb84d}.st-done{color:#00d4aa}.st-paid{color:#7fb3ff}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -29,6 +44,7 @@ li{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px s
   <h1>ECC Desk</h1>
   <p class="sub">Easy Core Cut General Contracting</p>
 
+  <!-- LOGIN -->
   <div id="login" class="card">
     <input id="email" type="email" placeholder="Email" autocomplete="username">
     <input id="pass" type="password" placeholder="Password" autocomplete="current-password">
@@ -36,10 +52,83 @@ li{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px s
     <p id="msg" class="msg"></p>
   </div>
 
-  <div id="app" class="card" hidden>
-    <div class="row"><span id="who"></span><button id="btnOut" class="ghost">Logout</button></div>
-    <h2>👷 Staff</h2>
-    <ul id="staff"></ul>
+  <!-- APP -->
+  <div id="app" hidden>
+    <div class="row"><span id="who" class="small"></span><button id="btnOut" class="ghost">Logout</button></div>
+
+    <div class="tabs">
+      <button data-tab="jobs" class="on">🏗️ Jobs</button>
+      <button data-tab="customers">🏢 Customers</button>
+      <button data-tab="staff">👷 Staff</button>
+    </div>
+
+    <!-- JOBS -->
+    <section id="tab-jobs">
+      <div class="card">
+        <div class="totals">
+          <div>Jobs<b id="tJobs">0</b></div>
+          <div>Holes / m<b id="tQty">0</b></div>
+          <div>Total SAR<b id="tSar">0</b></div>
+        </div>
+      </div>
+      <div class="card">
+        <details id="jobForm">
+          <summary>➕ New Job / പുതിയ ജോലി</summary>
+          <div style="margin-top:12px">
+            <label>Date</label><input id="jDate" type="date">
+            <label>Customer</label><select id="jCust"></select>
+            <label>Site name</label><input id="jSite" placeholder="e.g. Aramco Tower B">
+            <div class="grid2">
+              <div><label>City</label><select id="jCity"></select></div>
+              <div><label>Work type</label><select id="jType"></select></div>
+              <div><label>Holes</label><input id="jHoles" type="number" inputmode="numeric" value="0"></div>
+              <div><label>Meters</label><input id="jMeters" type="number" inputmode="decimal" value="0"></div>
+            </div>
+            <label>Amount (SAR, before VAT)</label><input id="jAmount" type="number" inputmode="decimal" value="0">
+            <p class="small" id="jVatPreview">VAT 15%: 0.00 · Total: 0.00 SAR</p>
+            <div class="grid2">
+              <div><label>Team</label><input id="jTeam" placeholder="Rashid, Ayoob"></div>
+              <div><label>Machine</label><input id="jMachine" placeholder="Hilti DD 350"></div>
+            </div>
+            <label>Status</label>
+            <select id="jStatus"><option value="pending">Pending</option><option value="done">Done</option><option value="paid">Paid</option></select>
+            <label>Notes</label><textarea id="jNotes" rows="2"></textarea>
+            <button id="btnJob">Save Job</button>
+            <p id="jMsg" class="msg"></p>
+          </div>
+        </details>
+      </div>
+      <div class="card"><h2>Recent jobs</h2><ul id="jobs"></ul></div>
+    </section>
+
+    <!-- CUSTOMERS -->
+    <section id="tab-customers" hidden>
+      <div class="card">
+        <details id="custForm">
+          <summary>➕ New Customer / പുതിയ customer</summary>
+          <div style="margin-top:12px">
+            <label>Company name *</label><input id="cName">
+            <label>Contact person</label><input id="cContact">
+            <div class="grid2">
+              <div><label>Phone</label><input id="cPhone" type="tel" placeholder="05xxxxxxxx"></div>
+              <div><label>City</label><select id="cCity"></select></div>
+            </div>
+            <label>Email</label><input id="cEmail" type="email">
+            <label>VAT number</label><input id="cVat" inputmode="numeric" placeholder="3xxxxxxxxxxxxx3">
+            <label>Address</label><input id="cAddr">
+            <label>Notes</label><textarea id="cNotes" rows="2"></textarea>
+            <button id="btnCust">Save Customer</button>
+            <p id="cMsg" class="msg"></p>
+          </div>
+        </details>
+      </div>
+      <div class="card"><h2>Customers</h2><ul id="customers"></ul></div>
+    </section>
+
+    <!-- STAFF -->
+    <section id="tab-staff" hidden>
+      <div class="card"><h2>👷 Staff</h2><ul id="staff"></ul></div>
+    </section>
   </div>
 </div>
 
@@ -49,6 +138,106 @@ const sb = supabase.createClient(
   'sb_publishable_bKOLPHV4dzHdyhQZweIwBQ_zCxE8bN6'
 );
 const $ = id => document.getElementById(id);
+const CITIES = ['Dammam','Al Khobar','Riyadh','Jeddah','Jubail','Yanbu','Other'];
+const TYPES = ['Core drilling','Wall sawing','Wire sawing','Floor sawing','Demolition','Equipment rental','Other'];
+const sar = n => Number(n || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+let customers = [];
+
+function fill(sel, list) { sel.innerHTML = ''; list.forEach(v => { const o = document.createElement('option'); o.value = o.textContent = v; sel.appendChild(o); }); }
+fill($('jCity'), CITIES); fill($('cCity'), CITIES); fill($('jType'), TYPES);
+$('jDate').value = new Date().toISOString().slice(0,10);
+
+function li(title, right, sub, rightClass) {
+  const el = document.createElement('li');
+  el.innerHTML = '<div class="li-row"><span></span><span></span></div><div class="small"></div>';
+  el.querySelector('.li-row').children[0].textContent = title;
+  const r = el.querySelector('.li-row').children[1];
+  r.textContent = right; r.className = rightClass || 'tag';
+  const s = el.querySelector('.small');
+  if (sub) s.textContent = sub; else s.remove();
+  return el;
+}
+
+// Tabs
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  ['jobs','customers','staff'].forEach(t => $('tab-' + t).hidden = t !== b.dataset.tab);
+});
+
+// VAT preview
+$('jAmount').oninput = () => {
+  const a = Number($('jAmount').value || 0);
+  $('jVatPreview').textContent = 'VAT 15%: ' + sar(a * 0.15) + ' · Total: ' + sar(a * 1.15) + ' SAR';
+};
+
+async function loadStaff() {
+  const { data, error } = await sb.from('staff').select('name, role').order('id');
+  const ul = $('staff'); ul.innerHTML = '';
+  if (error) { ul.textContent = 'Error: ' + error.message; return; }
+  data.forEach(s => ul.appendChild(li(s.name, s.role)));
+}
+
+async function loadCustomers() {
+  const { data, error } = await sb.from('customers').select('*').order('company_name');
+  const ul = $('customers'); ul.innerHTML = '';
+  if (error) { ul.textContent = 'Error: ' + error.message; return; }
+  customers = data;
+  if (!data.length) ul.appendChild(li('No customers yet', '', 'Tap "New Customer" above'));
+  data.forEach(c => ul.appendChild(li(c.company_name, c.city || '',
+    [c.contact_person, c.phone, c.vat_number ? 'VAT ' + c.vat_number : ''].filter(Boolean).join(' · '))));
+  const sel = $('jCust'); sel.innerHTML = '<option value="">— Select customer —</option>';
+  data.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.company_name; sel.appendChild(o); });
+}
+
+async function loadJobs() {
+  const { data, error } = await sb.from('jobs').select('*, customers(company_name)').order('job_date', {ascending:false}).order('id', {ascending:false}).limit(50);
+  const ul = $('jobs'); ul.innerHTML = '';
+  if (error) { ul.textContent = 'Error: ' + error.message; return; }
+  let holes = 0, meters = 0, total = 0;
+  data.forEach(j => { holes += j.holes || 0; meters += Number(j.meters || 0); total += Number(j.total || 0); });
+  $('tJobs').textContent = data.length;
+  $('tQty').textContent = holes + ' / ' + meters;
+  $('tSar').textContent = sar(total);
+  if (!data.length) ul.appendChild(li('No jobs yet', '', 'Tap "New Job" above'));
+  data.forEach(j => {
+    const title = (j.site_name || 'Site') + (j.customers ? ' — ' + j.customers.company_name : '');
+    const sub = [j.job_date, j.city, j.work_type, j.holes ? j.holes + ' holes' : '', Number(j.meters) ? j.meters + ' m' : '',
+      'Total ' + sar(j.total) + ' SAR (VAT ' + sar(j.vat) + ')'].filter(Boolean).join(' · ');
+    ul.appendChild(li(title, j.status, sub, 'tag st-' + j.status));
+  });
+}
+
+$('btnCust').onclick = async () => {
+  const name = $('cName').value.trim();
+  if (!name) { $('cMsg').className = 'msg'; $('cMsg').textContent = 'Company name is required'; return; }
+  $('cMsg').textContent = 'Saving...';
+  const { error } = await sb.from('customers').insert({
+    company_name: name, contact_person: $('cContact').value.trim() || null, phone: $('cPhone').value.trim() || null,
+    email: $('cEmail').value.trim() || null, city: $('cCity').value, vat_number: $('cVat').value.trim() || null,
+    address: $('cAddr').value.trim() || null, notes: $('cNotes').value.trim() || null
+  });
+  if (error) { $('cMsg').className = 'msg'; $('cMsg').textContent = 'Error: ' + error.message; return; }
+  ['cName','cContact','cPhone','cEmail','cVat','cAddr','cNotes'].forEach(id => $(id).value = '');
+  $('cMsg').className = 'msg ok'; $('cMsg').textContent = '✅ Saved';
+  loadCustomers();
+};
+
+$('btnJob').onclick = async () => {
+  $('jMsg').className = 'msg'; $('jMsg').textContent = 'Saving...';
+  const { error } = await sb.from('jobs').insert({
+    job_date: $('jDate').value || null, customer_id: $('jCust').value ? Number($('jCust').value) : null,
+    site_name: $('jSite').value.trim() || null, city: $('jCity').value, work_type: $('jType').value,
+    holes: Number($('jHoles').value || 0), meters: Number($('jMeters').value || 0), amount: Number($('jAmount').value || 0),
+    team: $('jTeam').value.trim() || null, machine: $('jMachine').value.trim() || null,
+    status: $('jStatus').value, notes: $('jNotes').value.trim() || null
+  });
+  if (error) { $('jMsg').textContent = 'Error: ' + error.message; return; }
+  ['jSite','jTeam','jMachine','jNotes'].forEach(id => $(id).value = '');
+  ['jHoles','jMeters','jAmount'].forEach(id => $(id).value = 0);
+  $('jAmount').oninput();
+  $('jMsg').className = 'msg ok'; $('jMsg').textContent = '✅ Saved';
+  loadJobs();
+};
 
 async function show() {
   const { data: { session } } = await sb.auth.getSession();
@@ -56,31 +245,19 @@ async function show() {
   $('app').hidden = !session;
   if (!session) return;
   $('who').textContent = session.user.email;
-  const { data, error } = await sb.from('staff').select('name, role').order('id');
-  $('staff').innerHTML = '';
-  if (error) { $('staff').textContent = 'Error: ' + error.message; return; }
-  data.forEach(s => {
-    const li = document.createElement('li');
-    li.innerHTML = '<span></span><span class="role"></span>';
-    li.children[0].textContent = s.name;
-    li.children[1].textContent = s.role;
-    $('staff').appendChild(li);
-  });
+  await loadCustomers();
+  loadJobs(); loadStaff();
 }
 
 $('btnLogin').onclick = async () => {
   $('msg').textContent = 'Please wait...';
-  const { error } = await sb.auth.signInWithPassword({
-    email: $('email').value.trim(),
-    password: $('pass').value
-  });
+  const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pass').value });
   $('msg').textContent = error ? 'Wrong email or password' : '';
   show();
 };
-
 $('btnOut').onclick = async () => { await sb.auth.signOut(); show(); };
 
 show();
 </script>
 </body>
-</html> 
+</html>
