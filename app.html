@@ -24,8 +24,8 @@ button{width:100%;padding:13px;border:0;border-radius:10px;background:#00d4aa;co
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
 .msg{color:#ff8080;text-align:center;min-height:18px;margin:6px 0 0}
 .ok{color:#00d4aa}
-.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:12px 0 14px}
-.tabs button{background:#24243e;color:#aaa;padding:11px 4px;font-size:14px}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0 14px}
+.tabs button{background:#24243e;color:#aaa;padding:10px 2px;font-size:13px}
 .tabs button.on{background:#00d4aa;color:#1a1a2e}
 ul{list-style:none;padding:0;margin:0}
 li{padding:11px 0;border-bottom:1px solid #333}
@@ -49,6 +49,12 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
 .chk{display:flex;align-items:center;gap:8px;color:#fff;font-size:15px;margin:0 0 12px}
 .chk input{width:22px;height:22px;margin:0}
 .ledger{background:#1a1a2e;border-radius:10px;padding:10px 12px;margin-top:10px}
+.alertbar{background:#3a2a10;color:#ffb84d;border-radius:10px;padding:10px 12px;margin:0 0 12px;cursor:pointer;font-size:14px}
+.alertbar.bad{background:#3a1714;color:#ff8080}
+.dstat-exp,.stats b.dstat-exp{color:#ff8080}.dstat-soon,.stats b.dstat-soon{color:#ffb84d}.dstat-ok{color:#00d4aa}.dstat-none{color:#aaa}
+.docact{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.docact label,.docact button{width:auto;font-size:13px;padding:7px 10px;border-radius:8px;background:#1a1a2e;color:#00d4aa;border:1px solid #00d4aa;font-weight:bold;cursor:pointer;margin:0}
+.docact input[type=date]{width:auto;margin:0;padding:6px 8px;font-size:14px}
 .scanbtn{display:block;text-align:center;background:#1a1a2e;border:2px dashed #00d4aa;color:#00d4aa;border-radius:10px;padding:14px;font-size:16px;font-weight:bold;margin-bottom:8px;cursor:pointer}
 .prev{display:block;max-width:100%;max-height:260px;border-radius:10px;margin:0 auto 10px}
 .st{width:auto;padding:4px 6px;margin:0;font-size:13px;border-radius:8px}
@@ -81,7 +87,10 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
       <button data-tab="customers">🏢 Customers</button>
       <button data-tab="staff">👷 Staff</button>
       <button data-tab="month">📊 Month</button>
+      <button data-tab="docs">📄 Docs</button>
     </div>
+
+    <div id="docAlert" class="alertbar" hidden></div>
 
     <!-- JOBS -->
     <section id="tab-jobs">
@@ -230,6 +239,37 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
     </section>
 
     <!-- MONTH -->
+    <section id="tab-docs" hidden>
+      <div class="card">
+        <div class="stats">
+          <div>Expired<b id="dExp" class="dstat-exp">0</b></div>
+          <div>Due 30 days<b id="dSoon" class="dstat-soon">0</b></div>
+          <div>Total<b id="dTot">0</b></div>
+        </div>
+      </div>
+      <div class="card">
+        <details>
+          <summary>➕ Add document</summary>
+          <div style="margin-top:12px">
+            <label>Document *</label><input id="dName" list="dNames" placeholder="Iqama, Istimara, CR, Balady...">
+            <datalist id="dNames"></datalist>
+            <div class="grid2">
+              <div><label>Group</label><select id="dCat"></select></div>
+              <div><label>Expiry date</label><input id="dExpiry" type="date"></div>
+            </div>
+            <label>Belongs to</label><input id="dHolder" placeholder="Company, staff name, plate no.">
+            <label>Number</label><input id="dNumber" placeholder="Document / licence number">
+            <label class="scanbtn">📎 Add photo or PDF<input type="file" id="dFile" accept="image/*,application/pdf" hidden></label>
+            <p class="small" id="dFileName"></p>
+            <label>Notes</label><textarea id="dNotes" rows="2"></textarea>
+            <button id="btnDoc">Save Document</button>
+            <p id="dMsg" class="msg"></p>
+          </div>
+        </details>
+      </div>
+      <div class="card"><h2>Documents</h2><p class="small">Sorted by expiry. Red = expired, orange = due within 30 days.</p><ul id="docs"></ul></div>
+    </section>
+
     <section id="tab-month" hidden>
       <div class="card">
         <label>Month</label><input id="mMonth" type="month">
@@ -304,7 +344,7 @@ function splitTeam(t) { return (t || '').split(',').map(x => x.trim()).filter(Bo
 // Tabs
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-  ['jobs','report','money','customers','staff','month'].forEach(t => $('tab-' + t).hidden = t !== b.dataset.tab);
+  ['jobs','report','money','customers','staff','month','docs'].forEach(t => $('tab-' + t).hidden = t !== b.dataset.tab);
   if (b.dataset.tab === 'month') loadMonth();
   if (b.dataset.tab === 'customers') loadCustomers();
 });
@@ -714,6 +754,92 @@ $('btnExp').onclick = async () => {
 };
 
 // ---------- AUTH ----------
+// ---------- DOCUMENTS ----------
+const DOC_NAMES = ['Commercial Registration (CR)','Commercial Activity Licence (Balady)','Chamber of Commerce','Civil Defense certificate','GOSI certificate','Saudization (Nitaqat) certificate','Zakat certificate','VAT certificate','Company insurance','Address Proof (National Address)','IBAN letter','Iqama','Passport','Exit Re-Entry Visa','Medical insurance','Driving licence','Vehicle Istimara','Vehicle insurance','Vehicle periodic inspection (Fahas)','Equipment certificate'];
+const DOC_CATS = ['Company','Employee','Vehicle','Equipment'];
+DOC_NAMES.forEach(n => { const o = document.createElement('option'); o.value = n; $('dNames').appendChild(o); });
+fill($('dCat'), DOC_CATS);
+let docFile = null;
+const daysLeft = d => d ? Math.round((new Date(d + 'T00:00:00') - new Date(today() + 'T00:00:00')) / 86400000) : null;
+function docStatus(d) {
+  const l = daysLeft(d.expiry_date);
+  if (l === null) return { t: 'No expiry', c: 'dstat-none', k: 3 };
+  if (l < 0) return { t: 'Expired ' + (-l) + ' days ago', c: 'dstat-exp', k: 0 };
+  if (l <= 30) return { t: l === 0 ? 'Expires today' : 'Due in ' + l + ' days', c: 'dstat-soon', k: 1 };
+  return { t: 'OK · ' + l + ' days', c: 'dstat-ok', k: 2 };
+}
+$('dFile').onchange = async () => {
+  const f = $('dFile').files[0]; docFile = null; $('dFileName').textContent = '';
+  if (!f) return;
+  try { docFile = f.type.startsWith('image/') ? await shrink(f, 2000) : f;
+    $('dFileName').textContent = '📎 ' + f.name + ' (' + Math.round(docFile.size / 1024) + ' KB)'; }
+  catch (e) { $('dFileName').textContent = 'Could not read file: ' + e.message; }
+};
+async function uploadDoc(file) {
+  const pdf = file.type === 'application/pdf';
+  const path = today().slice(0, 7) + '/' + Date.now() + (pdf ? '.pdf' : '.jpg');
+  const up = await sb.storage.from('documents').upload(path, file, { contentType: pdf ? 'application/pdf' : 'image/jpeg' });
+  if (up.error) throw new Error(/bucket/i.test(up.error.message) ? 'File storage not ready: run the documents SQL in Supabase.' : up.error.message);
+  return { file_path: path, file_type: pdf ? 'pdf' : 'image' };
+}
+async function openDoc(path) {
+  const w = window.open('', '_blank');
+  const { data, error } = await sb.storage.from('documents').createSignedUrl(path, 600);
+  if (error) { if (w) w.close(); setMsg('dMsg', 'Could not open file: ' + error.message); return; }
+  if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
+}
+async function loadDocs() {
+  const { data, error } = await sb.from('documents').select('*');
+  const ul = $('docs'); ul.innerHTML = '';
+  if (error) { ul.textContent = /relation|does not exist|schema cache/i.test(error.message) ? 'Documents not set up yet: run the documents SQL in Supabase.' : 'Error: ' + error.message; return; }
+  const list = data.map(d => ({ ...d, st: docStatus(d) }))
+    .sort((a, b) => a.st.k - b.st.k || (a.expiry_date || '9').localeCompare(b.expiry_date || '9'));
+  const exp = list.filter(d => d.st.k === 0).length, soon = list.filter(d => d.st.k === 1).length;
+  $('dExp').textContent = exp; $('dSoon').textContent = soon; $('dTot').textContent = list.length;
+  const bar = $('docAlert');
+  if (exp || soon) {
+    bar.hidden = false; bar.className = 'alertbar' + (exp ? ' bad' : '');
+    bar.textContent = '⚠️ Documents: ' + [exp ? exp + ' expired' : '', soon ? soon + ' due within 30 days' : ''].filter(Boolean).join(' · ') + ' — tap to see';
+    bar.onclick = () => document.querySelector('.tabs button[data-tab="docs"]').click();
+  } else bar.hidden = true;
+  if (!list.length) empty(ul, 'No documents yet — tap "Add document" above');
+  list.forEach(d => {
+    const el = li((d.file_path ? '📎 ' : '') + d.name, d.st.t,
+      [d.category, d.holder, d.doc_number ? 'No. ' + d.doc_number : '', d.expiry_date ? 'Expiry ' + d.expiry_date : '', d.notes].filter(Boolean).join(' · '), d.st.c);
+    const act = document.createElement('div'); act.className = 'docact';
+    if (d.file_path) { const b = document.createElement('button'); b.textContent = '👁️ View'; b.onclick = () => openDoc(d.file_path); act.appendChild(b); }
+    const dt = document.createElement('input'); dt.type = 'date'; dt.value = d.expiry_date || ''; dt.title = 'Change expiry date';
+    dt.onchange = async () => { const { error } = await sb.from('documents').update({ expiry_date: dt.value || null }).eq('id', d.id);
+      if (error) alertRow(el, 'Error: ' + error.message); else loadDocs(); };
+    act.appendChild(dt);
+    const fl = document.createElement('label'); fl.textContent = d.file_path ? '🔄 Replace file' : '📎 Add file';
+    const fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*,application/pdf'; fi.hidden = true; fl.appendChild(fi);
+    fi.onchange = async () => { const f = fi.files[0]; if (!f) return; fl.firstChild.textContent = 'Uploading...';
+      try { const blob = f.type.startsWith('image/') ? await shrink(f, 2000) : f; const u = await uploadDoc(blob);
+        const { error } = await sb.from('documents').update(u).eq('id', d.id); if (error) throw error; loadDocs(); }
+      catch (e) { alertRow(el, 'Error: ' + e.message); fl.firstChild.textContent = '📎 Add file'; } };
+    act.appendChild(fl);
+    const del = document.createElement('button'); del.textContent = '🗑️'; let armed = false;
+    del.onclick = async () => { if (!armed) { armed = true; del.textContent = 'Sure? Tap again'; return; }
+      const { error } = await sb.from('documents').delete().eq('id', d.id); if (error) alertRow(el, 'Error: ' + error.message); else loadDocs(); };
+    act.appendChild(del);
+    el.appendChild(act); ul.appendChild(el);
+  });
+}
+$('btnDoc').onclick = async () => {
+  const name = $('dName').value.trim();
+  if (!name) return setMsg('dMsg', 'Document name is required');
+  setMsg('dMsg', 'Saving...', true);
+  let fileInfo = {};
+  try { if (docFile) fileInfo = await uploadDoc(docFile); } catch (e) { return setMsg('dMsg', e.message); }
+  const { error } = await sb.from('documents').insert({ name, category: $('dCat').value, holder: $('dHolder').value.trim() || null,
+    doc_number: $('dNumber').value.trim() || null, expiry_date: $('dExpiry').value || null, notes: $('dNotes').value.trim() || null, ...fileInfo });
+  if (error) return setMsg('dMsg', 'Error: ' + error.message);
+  ['dName','dHolder','dNumber','dExpiry','dNotes'].forEach(id => $(id).value = '');
+  docFile = null; $('dFile').value = ''; $('dFileName').textContent = '';
+  setMsg('dMsg', '✅ Saved', true); loadDocs();
+};
+
 async function show() {
   const { data: { session } } = await sb.auth.getSession();
   $('login').hidden = !!session;
@@ -721,7 +847,7 @@ async function show() {
   if (!session) return;
   $('who').textContent = session.user.email;
   await Promise.all([loadStaff(), loadCustomers()]);
-  loadJobs(); loadReports(); loadMoney();
+  loadJobs(); loadReports(); loadMoney(); loadDocs();
 }
 
 $('login').onsubmit = async (e) => {
