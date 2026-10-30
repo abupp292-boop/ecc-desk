@@ -55,6 +55,7 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
 .docact{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .docact label,.docact button{width:auto;font-size:13px;padding:7px 10px;border-radius:8px;background:#1a1a2e;color:#00d4aa;border:1px solid #00d4aa;font-weight:bold;cursor:pointer;margin:0}
 .docact input[type=date]{width:auto;margin:0;padding:6px 8px;font-size:14px}
+.renew{background:#1a1a2e;border-radius:10px;padding:10px 12px;margin-top:10px}
 .scanbtn{display:block;text-align:center;background:#1a1a2e;border:2px dashed #00d4aa;color:#00d4aa;border-radius:10px;padding:14px;font-size:16px;font-weight:bold;margin-bottom:8px;cursor:pointer}
 .prev{display:block;max-width:100%;max-height:260px;border-radius:10px;margin:0 auto 10px}
 .st{width:auto;padding:4px 6px;margin:0;font-size:13px;border-radius:8px}
@@ -267,7 +268,8 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
           </div>
         </details>
       </div>
-      <div class="card"><h2>Documents</h2><p class="small">Sorted by expiry. Red = expired, orange = due within 30 days.</p><ul id="docs"></ul></div>
+      <div class="card"><h2>Documents</h2><p class="small">Sorted by expiry. Red = expired, orange = due within 30 days. Renewing keeps the old copy in "Old versions".</p><ul id="docs"></ul></div>
+      <div class="card"><details><summary>📁 Old versions (<span id="dOldN">0</span>)</summary><ul id="docsOld" style="margin-top:8px"></ul></details></div>
     </section>
 
     <section id="tab-month" hidden>
@@ -790,41 +792,66 @@ async function openDoc(path) {
 }
 async function loadDocs() {
   const { data, error } = await sb.from('documents').select('*');
-  const ul = $('docs'); ul.innerHTML = '';
+  const ul = $('docs'); ul.innerHTML = ''; $('docsOld').innerHTML = '';
   if (error) { ul.textContent = /relation|does not exist|schema cache/i.test(error.message) ? 'Documents not set up yet: run the documents SQL in Supabase.' : 'Error: ' + error.message; return; }
-  const list = data.map(d => ({ ...d, st: docStatus(d) }))
+  const active = data.filter(d => !d.archived).map(d => ({ ...d, st: docStatus(d) }))
     .sort((a, b) => a.st.k - b.st.k || (a.expiry_date || '9').localeCompare(b.expiry_date || '9'));
-  const exp = list.filter(d => d.st.k === 0).length, soon = list.filter(d => d.st.k === 1).length;
-  $('dExp').textContent = exp; $('dSoon').textContent = soon; $('dTot').textContent = list.length;
+  const old = data.filter(d => d.archived).sort((a, b) => (b.expiry_date || '').localeCompare(a.expiry_date || ''));
+  const exp = active.filter(d => d.st.k === 0).length, soon = active.filter(d => d.st.k === 1).length;
+  $('dExp').textContent = exp; $('dSoon').textContent = soon; $('dTot').textContent = active.length; $('dOldN').textContent = old.length;
   const bar = $('docAlert');
   if (exp || soon) {
     bar.hidden = false; bar.className = 'alertbar' + (exp ? ' bad' : '');
     bar.textContent = '⚠️ Documents: ' + [exp ? exp + ' expired' : '', soon ? soon + ' due within 30 days' : ''].filter(Boolean).join(' · ') + ' — tap to see';
     bar.onclick = () => document.querySelector('.tabs button[data-tab="docs"]').click();
   } else bar.hidden = true;
-  if (!list.length) empty(ul, 'No documents yet — tap "Add document" above');
-  list.forEach(d => {
-    const el = li((d.file_path ? '📎 ' : '') + d.name, d.st.t,
-      [d.category, d.holder, d.doc_number ? 'No. ' + d.doc_number : '', d.expiry_date ? 'Expiry ' + d.expiry_date : '', d.notes].filter(Boolean).join(' · '), d.st.c);
+  if (!active.length) empty(ul, 'No documents yet — tap "Add document" above');
+  const info = d => [d.category, d.holder, d.doc_number ? 'No. ' + d.doc_number : '', d.expiry_date ? 'Expiry ' + d.expiry_date : '', d.notes].filter(Boolean).join(' · ');
+  const viewBtn = d => { const b = document.createElement('button'); b.textContent = '👁️ View'; b.onclick = () => openDoc(d.file_path); return b; };
+  active.forEach(d => {
+    const el = li((d.file_path ? '📎 ' : '') + d.name, d.st.t, info(d), d.st.c);
     const act = document.createElement('div'); act.className = 'docact';
-    if (d.file_path) { const b = document.createElement('button'); b.textContent = '👁️ View'; b.onclick = () => openDoc(d.file_path); act.appendChild(b); }
-    const dt = document.createElement('input'); dt.type = 'date'; dt.value = d.expiry_date || ''; dt.title = 'Change expiry date';
-    dt.onchange = async () => { const { error } = await sb.from('documents').update({ expiry_date: dt.value || null }).eq('id', d.id);
-      if (error) alertRow(el, 'Error: ' + error.message); else loadDocs(); };
-    act.appendChild(dt);
-    const fl = document.createElement('label'); fl.textContent = d.file_path ? '🔄 Replace file' : '📎 Add file';
-    const fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*,application/pdf'; fi.hidden = true; fl.appendChild(fi);
-    fi.onchange = async () => { const f = fi.files[0]; if (!f) return; fl.firstChild.textContent = 'Uploading...';
-      try { const blob = f.type.startsWith('image/') ? await shrink(f, 2000) : f; const u = await uploadDoc(blob);
-        const { error } = await sb.from('documents').update(u).eq('id', d.id); if (error) throw error; loadDocs(); }
-      catch (e) { alertRow(el, 'Error: ' + e.message); fl.firstChild.textContent = '📎 Add file'; } };
-    act.appendChild(fl);
-    const del = document.createElement('button'); del.textContent = '🗑️'; let armed = false;
-    del.onclick = async () => { if (!armed) { armed = true; del.textContent = 'Sure? Tap again'; return; }
-      const { error } = await sb.from('documents').delete().eq('id', d.id); if (error) alertRow(el, 'Error: ' + error.message); else loadDocs(); };
-    act.appendChild(del);
+    if (d.file_path) act.appendChild(viewBtn(d));
+    const rn = document.createElement('button'); rn.textContent = '🔄 Renew'; rn.onclick = () => renewForm(el, d); act.appendChild(rn);
+    if (!d.file_path) {
+      const fl = document.createElement('label'); fl.textContent = '📎 Add file';
+      const fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*,application/pdf'; fi.hidden = true; fl.appendChild(fi);
+      fi.onchange = async () => { const f = fi.files[0]; if (!f) return; fl.firstChild.textContent = 'Uploading...';
+        try { const blob = f.type.startsWith('image/') ? await shrink(f, 2000) : f; const u = await uploadDoc(blob);
+          const { error } = await sb.from('documents').update(u).eq('id', d.id); if (error) throw error; loadDocs(); }
+        catch (e) { alertRow(el, 'Error: ' + e.message); fl.firstChild.textContent = '📎 Add file'; } };
+      act.appendChild(fl);
+    }
     el.appendChild(act); ul.appendChild(el);
   });
+  if (!old.length) empty($('docsOld'), 'No old versions yet');
+  old.forEach(d => { const el = li((d.file_path ? '📎 ' : '') + d.name, 'Renewed', info(d), 'dstat-none');
+    if (d.file_path) { const act = document.createElement('div'); act.className = 'docact'; act.appendChild(viewBtn(d)); el.appendChild(act); }
+    $('docsOld').appendChild(el); });
+}
+function renewForm(el, d) {
+  const old = el.querySelector('.renew'); if (old) { old.remove(); return; }
+  const box = document.createElement('div'); box.className = 'renew';
+  box.innerHTML = '<label>New expiry date</label><input type="date" class="rnDate"><label>New number (if changed)</label><input class="rnNo"><label class="scanbtn">📎 New photo or PDF<input type="file" class="rnFile" accept="image/*,application/pdf" hidden></label><p class="small rnFn"></p><button class="rnSave">Save renewal</button><p class="msg rnMsg"></p>';
+  box.querySelector('.rnNo').value = d.doc_number || '';
+  let file = null;
+  box.querySelector('.rnFile').onchange = async e => { const f = e.target.files[0]; if (!f) return;
+    file = f.type.startsWith('image/') ? await shrink(f, 2000) : f; box.querySelector('.rnFn').textContent = '📎 ' + f.name; };
+  box.querySelector('.rnSave').onclick = async () => {
+    const m = box.querySelector('.rnMsg'), nd = box.querySelector('.rnDate').value;
+    if (!nd) { m.textContent = 'Choose the new expiry date'; return; }
+    m.className = 'msg ok rnMsg'; m.textContent = 'Saving...';
+    try {
+      const fi = file ? await uploadDoc(file) : {};
+      const { error } = await sb.from('documents').insert({ name: d.name, category: d.category, holder: d.holder,
+        doc_number: box.querySelector('.rnNo').value.trim() || null, expiry_date: nd, notes: 'Renewed on ' + today(), ...fi });
+      if (error) throw error;
+      const r = await sb.from('documents').update({ archived: true }).eq('id', d.id);
+      if (r.error) throw r.error;
+      loadDocs();
+    } catch (e) { m.className = 'msg rnMsg'; m.textContent = 'Error: ' + e.message; }
+  };
+  el.appendChild(box);
 }
 $('btnDoc').onclick = async () => {
   const name = $('dName').value.trim();
