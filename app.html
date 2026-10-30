@@ -49,6 +49,8 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
 .chk{display:flex;align-items:center;gap:8px;color:#fff;font-size:15px;margin:0 0 12px}
 .chk input{width:22px;height:22px;margin:0}
 .ledger{background:#1a1a2e;border-radius:10px;padding:10px 12px;margin-top:10px}
+.scanbtn{display:block;text-align:center;background:#1a1a2e;border:2px dashed #00d4aa;color:#00d4aa;border-radius:10px;padding:14px;font-size:16px;font-weight:bold;margin-bottom:8px;cursor:pointer}
+.prev{display:block;max-width:100%;max-height:260px;border-radius:10px;margin:0 auto 10px}
 .st{width:auto;padding:4px 6px;margin:0;font-size:13px;border-radius:8px}
 .st-pending{color:#ffb84d}.st-done{color:#00d4aa}.st-paid{color:#7fb3ff}.st-np{color:#ff8080}
 [hidden]{display:none!important}
@@ -165,13 +167,20 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
       </div>
       <div class="card">
         <details>
-          <summary>➕ Expense</summary>
+          <summary>➕ Expense / 📷 Scan invoice</summary>
           <div style="margin-top:12px">
+            <label class="scanbtn">📷 Scan invoice (photo)<input type="file" id="eScan" accept="image/*" hidden></label>
+            <p class="small" id="eScanMsg"></p>
+            <img id="ePrev" class="prev" alt="Invoice photo" hidden>
             <label>Date</label><input id="eDate" type="date">
             <div class="grid2">
               <div><label>Category</label><select id="eCat"></select></div>
-              <div><label>Amount (SAR)</label><input id="eAmount" type="number" inputmode="decimal"></div>
+              <div><label>Total incl. VAT (SAR)</label><input id="eAmount" type="number" inputmode="decimal"></div>
+              <div><label>VAT (SAR)</label><input id="eVat" type="number" inputmode="decimal" placeholder="0"></div>
+              <div><label>Invoice no.</label><input id="eInv"></div>
             </div>
+            <label>Supplier / shop</label><input id="eSup">
+            <label>Supplier VAT no.</label><input id="eSupVat" inputmode="numeric" placeholder="3xxxxxxxxxxxxx3">
             <label>Staff (optional)</label><select id="eStaff"></select>
             <label>Job (optional)</label><select id="eJob"></select>
             <label>Notes</label><input id="eNotes" placeholder="e.g. paid from STC Pay">
@@ -448,9 +457,100 @@ async function loadMoney() {
   const eu = $('expenses'); eu.innerHTML = '';
   if (e.error) eu.textContent = 'Error: ' + e.error.message;
   else { if (!e.data.length) empty(eu, 'No expenses yet');
-    e.data.forEach(x => eu.appendChild(li((x.category || 'Expense') + ' · ' + x.exp_date,
-      sar(x.amount) + ' SAR', [x.staff ? x.staff.name : '', x.notes].filter(Boolean).join(' · '), 'num warn'))); }
+    e.data.forEach(x => { const el = li((x.photo_path ? '📎 ' : '') + (x.supplier || x.category || 'Expense') + ' · ' + x.exp_date,
+      sar(x.amount) + ' SAR', [x.supplier ? x.category : '', x.staff ? x.staff.name : '', Number(x.vat) ? 'VAT ' + sar(x.vat) : '', x.invoice_no ? 'Inv ' + x.invoice_no : '', x.notes].filter(Boolean).join(' · '), 'num warn');
+      if (x.photo_path) { el.style.cursor = 'pointer'; el.onclick = () => openPhoto(x.photo_path); }
+      eu.appendChild(el); }); }
 }
+
+async function openPhoto(path) {
+  const w = window.open('', '_blank');
+  const { data, error } = await sb.storage.from('invoices').createSignedUrl(path, 600);
+  if (error) { if (w) w.close(); alertMsg('Could not open photo: ' + error.message); return; }
+  if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
+}
+function alertMsg(t) { setMsg('eMsg', t); }
+
+// ---------- INVOICE SCAN (free, runs on the phone) ----------
+// Reads date, total, VAT, supplier, invoice no. and supplier VAT no. from OCR text of a receipt.
+function parseInvoice(text) {
+  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const out = { date: '', total: '', vat: '', supplier: '', invNo: '', supVat: '' };
+  const toNum = s => parseFloat(String(s).replace(/,/g, ''));
+  const nums = l => (l.match(/\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+\.\d{1,2}|\d+/g) || [])
+    .filter(x => x.replace(/[,.]/g, '').length < 9).map(toNum);
+
+  // Supplier VAT number: 15 digits starting and ending with 3
+  const vatNo = text.replace(/\s/g, '').match(/3\d{13}3/);
+  if (vatNo) out.supVat = vatNo[0];
+
+  // Date
+  const pad = n => String(n).padStart(2, '0');
+  const okYear = y => y >= 2020 && y <= 2035;
+  for (const l of lines) {
+    let m = l.match(/\b(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/);
+    if (m && okYear(+m[1]) && +m[2] <= 12 && +m[3] <= 31) { out.date = m[1] + '-' + pad(m[2]) + '-' + pad(m[3]); break; }
+    m = l.match(/\b(\d{1,2})[-\/.](\d{1,2})[-\/.](20\d{2})\b/);
+    if (m && okYear(+m[3]) && +m[2] <= 12 && +m[1] <= 31) { out.date = m[3] + '-' + pad(m[2]) + '-' + pad(m[1]); break; }
+  }
+
+  // Total: prefer lines that say total incl. VAT, then grand/net total, then any "total"
+  const pick = (re, skip) => { for (let i = lines.length - 1; i >= 0; i--) { if (re.test(lines[i]) && !(skip && skip.test(lines[i]))) { const n = nums(lines[i]).filter(x => x > 0); if (n.length) return n[n.length - 1]; } } return null; };
+  const tot = pick(/total.*(incl|with|inc\.).*vat|(incl|inc\.).*vat.*total|grand\s*total|net\s*total|total\s*amount|amount\s*due|net\s*amount/i)
+    ?? pick(/total/i);
+  if (tot != null) out.total = tot.toFixed(2);
+
+  // VAT amount (not the VAT number)
+  const vatAmt = pick(/\b(vat|tax)\b/i, /total|subtotal|\bno\b|number|reg|#|invoice/i);
+  if (vatAmt != null && (!tot || vatAmt < tot)) out.vat = vatAmt.toFixed(2);
+  if (!out.vat && tot) { /* leave empty; user can tick 15% */ }
+
+  // Invoice number
+  for (const l of lines) {
+    const m = l.match(/\b(?:invoice|inv|bill|receipt)\s*(?:no|number|#)\.?\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/]{2,})/i);
+    if (m && !/^\d{15}$/.test(m[1])) { out.invNo = m[1]; break; }
+  }
+
+  // Supplier: first line near the top with real letters
+  for (const l of lines.slice(0, 6)) {
+    if (/[A-Za-z]{3,}/.test(l) && !/invoice|tax|vat|date|cr\s*no|tel|phone|mobile|www|@/i.test(l)) { out.supplier = l.replace(/[^\w\s&.\-]/g, '').trim().slice(0, 60); break; }
+  }
+  return out;
+}
+
+let scanBlob = null;
+function loadScript(src) { return new Promise((ok, bad) => { if (window.Tesseract) return ok(); const t = document.createElement('script'); t.src = src; t.onload = ok; t.onerror = bad; document.head.appendChild(t); }); }
+function shrink(file, max) {
+  return new Promise((ok, bad) => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => { const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      c.toBlob(b => b ? ok(b) : bad(new Error('Could not read photo')), 'image/jpeg', 0.75); };
+    img.onerror = () => bad(new Error('Could not read photo')); img.src = url;
+  });
+}
+$('eScan').onchange = async () => {
+  const f = $('eScan').files[0]; if (!f) return;
+  const m = $('eScanMsg'); m.className = 'small';
+  try {
+    scanBlob = await shrink(f, 1600);
+    $('ePrev').src = URL.createObjectURL(scanBlob); $('ePrev').hidden = false;
+    m.textContent = 'Reading invoice... (first time takes longer)';
+    await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+    const r = await Tesseract.recognize(scanBlob, 'eng', { logger: x => { if (x.status === 'recognizing text') m.textContent = 'Reading invoice... ' + Math.round(x.progress * 100) + '%'; } });
+    const d = parseInvoice(r.data.text || '');
+    if (d.date) $('eDate').value = d.date;
+    if (d.total) $('eAmount').value = d.total;
+    if (d.vat) $('eVat').value = d.vat;
+    if (d.invNo) $('eInv').value = d.invNo;
+    if (d.supplier) $('eSup').value = d.supplier;
+    if (d.supVat) $('eSupVat').value = d.supVat;
+    const found = ['date','total','vat','supplier'].filter(k => d[k]).length;
+    m.className = 'small ' + (d.total ? 'warn' : 'bad');
+    m.textContent = d.total ? '⚠️ Please check the date and amounts before saving.' : '⚠️ Could not read the total. Please type it. The photo will still be saved.';
+  } catch (e) { m.className = 'small bad'; m.textContent = 'Could not read the invoice. Type the details; the photo will still be saved.'; }
+};
 
 async function loadMonth() {
   const m = $('mMonth').value; if (!m) return;
@@ -478,6 +578,9 @@ async function loadMonth() {
   box.appendChild(kv('Payments received', sar(received) + ' SAR', 'ok'));
   box.appendChild(kv('Cash collected by Manaf', sar(manafCash) + ' SAR', manafCash ? 'warn' : ''));
   box.appendChild(kv('Expenses', sar(spent) + ' SAR', 'warn'));
+  const vatIn = sum(e.data, 'vat');
+  box.appendChild(kv('VAT paid on purchases', sar(vatIn) + ' SAR'));
+  box.appendChild(kv('VAT to pay (sales VAT − purchase VAT)', sar(vat - vatIn) + ' SAR', vat - vatIn > 0 ? 'warn' : 'ok'));
   box.appendChild(kv('Profit (sales − expenses)', sar(profit) + ' SAR', profit < 0 ? 'bad' : 'ok'));
 
   // Incentive
@@ -588,13 +691,24 @@ $('btnExp').onclick = async () => {
   const amt = Number($('eAmount').value || 0);
   if (amt <= 0) return setMsg('eMsg', 'Enter the amount');
   setMsg('eMsg', 'Saving...', true);
+  let photo_path = null;
+  if (scanBlob) {
+    const d = $('eDate').value || today();
+    photo_path = d.slice(0, 7) + '/' + Date.now() + '.jpg';
+    const up = await sb.storage.from('invoices').upload(photo_path, scanBlob, { contentType: 'image/jpeg' });
+    if (up.error) return setMsg('eMsg', /bucket/i.test(up.error.message) ? 'Photo storage not ready: please run the invoice SQL in Supabase.' : 'Photo upload error: ' + up.error.message);
+  }
   const { error } = await sb.from('expenses').insert({
     exp_date: $('eDate').value || null, category: $('eCat').value, amount: amt,
+    vat: Number($('eVat').value || 0), supplier: $('eSup').value.trim() || null, invoice_no: $('eInv').value.trim() || null,
+    supplier_vat: $('eSupVat').value.trim() || null, photo_path,
     staff_id: $('eStaff').value ? Number($('eStaff').value) : null,
     job_id: $('eJob').value ? Number($('eJob').value) : null, notes: $('eNotes').value.trim() || null
   });
+  if (error && /column/.test(error.message)) return setMsg('eMsg', 'Database not updated yet: please run the invoice SQL in Supabase.');
   if (error) return setMsg('eMsg', 'Error: ' + error.message);
-  $('eAmount').value = ''; $('eNotes').value = ''; $('eStaff').value = ''; $('eJob').value = '';
+  ['eAmount','eNotes','eStaff','eJob','eVat','eInv','eSup','eSupVat','eScan'].forEach(id => $(id).value = '');
+  scanBlob = null; $('ePrev').hidden = true; $('eScanMsg').textContent = '';
   setMsg('eMsg', '✅ Saved', true);
   loadMoney();
 };
