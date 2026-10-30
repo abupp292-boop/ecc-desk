@@ -46,6 +46,9 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .chips label{display:flex;align-items:center;gap:6px;background:#1a1a2e;border:1px solid #444;border-radius:20px;padding:7px 12px;color:#fff;font-size:14px;margin:0}
 .chips input{width:auto;margin:0}
+.chk{display:flex;align-items:center;gap:8px;color:#fff;font-size:15px;margin:0 0 12px}
+.chk input{width:22px;height:22px;margin:0}
+.ledger{background:#1a1a2e;border-radius:10px;padding:10px 12px;margin-top:10px}
 .st{width:auto;padding:4px 6px;margin:0;font-size:13px;border-radius:8px}
 .st-pending{color:#ffb84d}.st-done{color:#00d4aa}.st-paid{color:#7fb3ff}.st-np{color:#ff8080}
 [hidden]{display:none!important}
@@ -86,7 +89,7 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
           <div>Holes / m<b id="tQty">0</b></div>
           <div>Total SAR<b id="tSar">0</b></div>
         </div>
-        <p class="small" style="text-align:center;margin:8px 0 0">Last 50 jobs</p>
+        <p class="small" style="text-align:center;margin:8px 0 0">Latest 50 jobs (or search results)</p>
       </div>
       <div class="card">
         <details>
@@ -102,7 +105,8 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
               <div><label>Meters</label><input id="jMeters" type="number" inputmode="decimal" value="0"></div>
             </div>
             <label>Amount (SAR, before VAT)</label><input id="jAmount" type="number" inputmode="decimal" value="0">
-            <p class="small" id="jVatPreview">VAT 15%: 0.00 · Total: 0.00 SAR</p>
+            <label class="chk"><input type="checkbox" id="jVat"> With VAT invoice (15%)</label>
+            <p class="small" id="jVatPreview">No VAT · Total: 0.00 SAR</p>
             <label>Team</label><div class="chips" id="jTeam"></div>
             <label>Machine</label><input id="jMachine" placeholder="e.g. Hilti DD 350">
             <label>Status</label>
@@ -113,7 +117,7 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
           </div>
         </details>
       </div>
-      <div class="card"><h2>Recent jobs</h2><ul id="jobs"></ul></div>
+      <div class="card"><h2>Jobs</h2><input id="jSearch" placeholder="🔍 Search site, work or note"><ul id="jobs"></ul></div>
     </section>
 
     <!-- DAILY REPORT -->
@@ -193,6 +197,7 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
               <div><label>City</label><select id="cCity"></select></div>
             </div>
             <label>Email</label><input id="cEmail" type="email">
+            <label class="chk"><input type="checkbox" id="cNeedsVat"> Needs VAT invoice</label>
             <label>VAT number</label><input id="cVat" inputmode="numeric" placeholder="3xxxxxxxxxxxxx3">
             <label>Address</label><input id="cAddr">
             <label>Notes</label><textarea id="cNotes" rows="2"></textarea>
@@ -203,7 +208,9 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
       </div>
       <div class="card">
         <input id="cSearch" placeholder="🔍 Search name or mobile">
-        <h2>Customers <span class="small">(balance = billed − received)</span></h2>
+        <h2>Customers</h2>
+        <p class="small" id="cTotal"></p>
+        <p class="small">Sorted by balance (billed − received). Tap a customer to see the ledger.</p>
         <ul id="customers"></ul>
       </div>
     </section>
@@ -293,10 +300,12 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   if (b.dataset.tab === 'customers') loadCustomers();
 });
 
-$('jAmount').oninput = () => {
-  const a = Number($('jAmount').value || 0);
-  $('jVatPreview').textContent = 'VAT 15%: ' + sar(a * 0.15) + ' · Total: ' + sar(a * 1.15) + ' SAR';
-};
+function vatPreview() {
+  const a = Number($('jAmount').value || 0), v = $('jVat').checked;
+  $('jVatPreview').textContent = v ? 'VAT 15%: ' + sar(a * 0.15) + ' · Total: ' + sar(a * 1.15) + ' SAR' : 'No VAT · Total: ' + sar(a) + ' SAR';
+}
+$('jAmount').oninput = vatPreview; $('jVat').onchange = vatPreview;
+$('jCust').onchange = () => { const c = customers.find(x => String(x.id) === $('jCust').value); $('jVat').checked = !!(c && c.needs_vat); vatPreview(); };
 
 // ---------- LOADERS ----------
 async function loadStaff() {
@@ -309,36 +318,79 @@ async function loadStaff() {
   fill($('eStaff'), data.map(s => ({ value: s.id, label: s.name })), '— None —');
 }
 
+async function fetchAll(table, cols) {
+  let out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from(table).select(cols).range(from, from + 999);
+    if (error) return { data: out, error };
+    out = out.concat(data);
+    if (data.length < 1000) return { data: out, error: null };
+  }
+}
+const vatText = j => j.with_vat === undefined ? ' (VAT ' + sar(j.vat) + ')' : (j.with_vat ? ' (VAT ' + sar(j.vat) + ')' : ' (no VAT)');
+let custBal = {};
 async function loadCustomers() {
-  const [c, j, p] = await Promise.all([
-    sb.from('customers').select('*').order('company_name'),
-    sb.from('jobs').select('customer_id, total'),
-    sb.from('payments').select('customer_id, amount')
-  ]);
-  const ul = $('customers'); ul.innerHTML = '';
-  if (c.error) { ul.textContent = 'Error: ' + c.error.message; return; }
-  customers = c.data;
+  const [c, j, p] = await Promise.all([fetchAll('customers', '*'), fetchAll('jobs', 'customer_id, total'), fetchAll('payments', 'customer_id, amount')]);
+  if (c.error) { $('customers').textContent = 'Error: ' + c.error.message; return; }
+  customers = c.data.sort((a, b) => (a.company_name || '').localeCompare(b.company_name || ''));
   const billed = {}, paid = {};
-  (j.data || []).forEach(x => { if (x.customer_id) billed[x.customer_id] = (billed[x.customer_id] || 0) + Number(x.total || 0); });
-  (p.data || []).forEach(x => { if (x.customer_id) paid[x.customer_id] = (paid[x.customer_id] || 0) + Number(x.amount || 0); });
-  const q = $('cSearch').value.trim().toLowerCase();
-  const list = c.data.filter(x => !q || (x.company_name || '').toLowerCase().includes(q) || (x.phone || '').includes(q));
-  if (!list.length) empty(ul, q ? 'No match' : 'No customers yet');
-  list.forEach(x => {
-    const bal = (billed[x.id] || 0) - (paid[x.id] || 0);
-    ul.appendChild(li(x.company_name, bal ? sar(bal) + ' SAR' : '0.00',
-      [x.contact_person, x.phone, x.city, x.vat_number ? 'VAT ' + x.vat_number : ''].filter(Boolean).join(' · '),
-      'num ' + (bal > 0 ? 'warn' : 'tag')));
-  });
-  const opts = c.data.map(x => ({ value: x.id, label: x.company_name + (x.phone ? ' (' + x.phone + ')' : '') }));
+  j.data.forEach(x => { if (x.customer_id) billed[x.customer_id] = (billed[x.customer_id] || 0) + Number(x.total || 0); });
+  p.data.forEach(x => { if (x.customer_id) paid[x.customer_id] = (paid[x.customer_id] || 0) + Number(x.amount || 0); });
+  custBal = {}; customers.forEach(x => custBal[x.id] = { billed: billed[x.id] || 0, paid: paid[x.id] || 0 });
+  renderCustomers();
+  const opts = customers.map(x => ({ value: x.id, label: x.company_name + (x.phone ? ' (' + x.phone + ')' : '') }));
   fill($('jCust'), opts, '— Select customer —');
   fill($('pCust'), opts, '— Select customer —');
 }
-$('cSearch').oninput = loadCustomers;
+function renderCustomers() {
+  const ul = $('customers'); ul.innerHTML = '';
+  const q = $('cSearch').value.trim().toLowerCase();
+  const bal = x => custBal[x.id] ? custBal[x.id].billed - custBal[x.id].paid : 0;
+  let list = customers.filter(x => !q || (x.company_name || '').toLowerCase().includes(q) || (x.phone || '').includes(q));
+  list = list.slice().sort((a, b) => bal(b) - bal(a));
+  const totalDue = customers.reduce((a, x) => a + Math.max(bal(x), 0), 0);
+  $('cTotal').textContent = customers.length + ' customers · To collect: ' + sar(totalDue) + ' SAR';
+  if (!list.length) empty(ul, q ? 'No match' : 'No customers yet');
+  list.slice(0, q ? 200 : 100).forEach(x => {
+    const b = bal(x);
+    const el = li(x.company_name, b ? sar(b) + ' SAR' : '0.00',
+      [x.contact_person, x.phone, x.city, x.needs_vat ? 'VAT invoice' : '', x.vat_number ? 'VAT no. ' + x.vat_number : ''].filter(Boolean).join(' · '),
+      'num ' + (b > 0 ? 'warn' : 'tag'));
+    el.style.cursor = 'pointer';
+    el.onclick = e => { if (e.target.closest('.ledger')) return; toggleLedger(el, x); };
+    ul.appendChild(el);
+  });
+  if (!q && list.length > 100) ul.appendChild(li('Showing top 100 by balance', '', 'Search by name or mobile to find others'));
+}
+async function toggleLedger(el, c) {
+  const old = el.querySelector('.ledger'); if (old) { old.remove(); return; }
+  const box = document.createElement('div'); box.className = 'ledger'; box.textContent = 'Loading...'; el.appendChild(box);
+  const [j, p] = await Promise.all([
+    sb.from('jobs').select('job_date, site_name, holes, meters, total, status').eq('customer_id', c.id).order('job_date', {ascending:false}),
+    sb.from('payments').select('pay_date, amount, method').eq('customer_id', c.id).order('pay_date', {ascending:false})
+  ]);
+  box.innerHTML = '';
+  if (j.error || p.error) { box.textContent = 'Error: ' + (j.error || p.error).message; return; }
+  const rows = j.data.map(x => ({ d: x.job_date, t: '🏗️ ' + (x.site_name || 'Job') + (x.holes ? ' · ' + x.holes + ' holes' : '') + (Number(x.meters) ? ' · ' + x.meters + ' m' : '') + ' · ' + x.status, v: '+' + sar(x.total), cls: 'num warn' }))
+    .concat(p.data.map(x => ({ d: x.pay_date, t: '💰 Payment · ' + (x.method || ''), v: '−' + sar(x.amount), cls: 'num tag' })))
+    .sort((a, b) => (b.d || '').localeCompare(a.d || ''));
+  const cb = custBal[c.id] || { billed: 0, paid: 0 };
+  box.appendChild(kv('Billed', sar(cb.billed) + ' SAR'));
+  box.appendChild(kv('Received', sar(cb.paid) + ' SAR', 'ok'));
+  box.appendChild(kv('Balance', sar(cb.billed - cb.paid) + ' SAR', cb.billed - cb.paid > 0 ? 'warn' : 'ok'));
+  if (c.notes) { const n = document.createElement('div'); n.className = 'small'; n.textContent = c.notes; box.appendChild(n); }
+  const ul = document.createElement('ul');
+  if (!rows.length) empty(ul, 'No jobs or payments');
+  rows.forEach(r => ul.appendChild(li(r.t, r.v, r.d, r.cls)));
+  box.appendChild(ul);
+}
+$('cSearch').oninput = renderCustomers;
 
 async function loadJobs() {
-  const { data, error } = await sb.from('jobs').select('*, customers(company_name)')
-    .order('job_date', {ascending:false}).order('id', {ascending:false}).limit(50);
+  const q = $('jSearch').value.trim().replace(/[%,()]/g, ' ');
+  let qry = sb.from('jobs').select('*, customers(company_name)');
+  if (q) qry = qry.or('site_name.ilike.%' + q + '%,notes.ilike.%' + q + '%');
+  const { data, error } = await qry.order('job_date', {ascending:false}).order('id', {ascending:false}).limit(50);
   const ul = $('jobs'); ul.innerHTML = '';
   if (error) { ul.textContent = 'Error: ' + error.message; return; }
   jobsCache = data;
@@ -351,7 +403,7 @@ async function loadJobs() {
   data.forEach(j => {
     const title = (j.site_name || 'Site') + (j.customers ? ' — ' + j.customers.company_name : '');
     const sub = [j.job_date, j.city, j.work_type, j.holes ? j.holes + ' holes' : '', Number(j.meters) ? j.meters + ' m' : '',
-      j.team ? 'Team: ' + j.team : '', 'Total ' + sar(j.total) + ' SAR (VAT ' + sar(j.vat) + ')'].filter(Boolean).join(' · ');
+      j.team ? 'Team: ' + j.team : '', 'Total ' + sar(j.total) + ' SAR' + vatText(j)].filter(Boolean).join(' · ');
     const el = li(title, '', sub);
     const sel = document.createElement('select');
     sel.className = 'st st-' + j.status;
@@ -369,6 +421,7 @@ async function loadJobs() {
   fill($('pJob'), jobOpts, '— None —');
   fill($('eJob'), jobOpts, '— None —');
 }
+let jT; $('jSearch').oninput = () => { clearTimeout(jT); jT = setTimeout(loadJobs, 400); };
 function alertRow(el, text) { const s = document.createElement('div'); s.className = 'small bad'; s.textContent = text; el.appendChild(s); }
 
 async function loadReports() {
@@ -461,34 +514,41 @@ async function loadMonth() {
 $('mMonth').onchange = loadMonth;
 
 // ---------- SAVE ----------
+// Works before and after the VAT columns are added in the database.
+async function insertSafe(table, row) {
+  let r = await sb.from(table).insert(row);
+  if (r.error && /with_vat|needs_vat/.test(r.error.message)) { const { with_vat, needs_vat, ...rest } = row; r = await sb.from(table).insert(rest); }
+  return r;
+}
 $('btnCust').onclick = async () => {
   const name = $('cName').value.trim();
   if (!name) return setMsg('cMsg', 'Company name is required');
   setMsg('cMsg', 'Saving...', true);
-  const { error } = await sb.from('customers').insert({
+  const { error } = await insertSafe('customers', {
     company_name: name, contact_person: $('cContact').value.trim() || null, phone: $('cPhone').value.trim() || null,
-    email: $('cEmail').value.trim() || null, city: $('cCity').value, vat_number: $('cVat').value.trim() || null,
+    email: $('cEmail').value.trim() || null, city: $('cCity').value, needs_vat: $('cNeedsVat').checked, vat_number: $('cVat').value.trim() || null,
     address: $('cAddr').value.trim() || null, notes: $('cNotes').value.trim() || null
   });
   if (error) return setMsg('cMsg', 'Error: ' + error.message);
   ['cName','cContact','cPhone','cEmail','cVat','cAddr','cNotes'].forEach(id => $(id).value = '');
+  $('cNeedsVat').checked = false;
   setMsg('cMsg', '✅ Saved', true);
   loadCustomers();
 };
 
 $('btnJob').onclick = async () => {
   setMsg('jMsg', 'Saving...', true);
-  const { error } = await sb.from('jobs').insert({
+  const { error } = await insertSafe('jobs', {
     job_date: $('jDate').value || null, customer_id: $('jCust').value ? Number($('jCust').value) : null,
     site_name: $('jSite').value.trim() || null, city: $('jCity').value, work_type: $('jType').value,
-    holes: Math.round(Number($('jHoles').value || 0)), meters: Number($('jMeters').value || 0), amount: Number($('jAmount').value || 0),
+    holes: Math.round(Number($('jHoles').value || 0)), meters: Number($('jMeters').value || 0), amount: Number($('jAmount').value || 0), with_vat: $('jVat').checked,
     team: teamValue('jTeam'), machine: $('jMachine').value.trim() || null,
     status: $('jStatus').value, notes: $('jNotes').value.trim() || null
   });
   if (error) return setMsg('jMsg', 'Error: ' + error.message);
   ['jSite','jMachine','jNotes'].forEach(id => $(id).value = '');
   ['jHoles','jMeters','jAmount'].forEach(id => $(id).value = 0);
-  clearTeam('jTeam'); $('jAmount').oninput();
+  clearTeam('jTeam'); $('jVat').checked = false; $('jCust').value = ''; vatPreview();
   setMsg('jMsg', '✅ Saved', true);
   loadJobs();
 };
