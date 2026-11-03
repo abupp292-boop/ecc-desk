@@ -290,6 +290,7 @@ const sb = supabase.createClient(
   'sb_publishable_bKOLPHV4dzHdyhQZweIwBQ_zCxE8bN6'
 );
 const $ = id => document.getElementById(id);
+const OWNER_EMAIL = 'aboobacker@easycorecut.com';
 const CITIES = ['Dammam','Al Khobar','Riyadh','Jeddah','Jubail','Yanbu','Other'];
 const TYPES = ['Core drilling','Wall sawing','Wire sawing','Floor sawing','Demolition','Equipment rental','Other'];
 const METHODS = ['Cash','Cash - Manaf','Bank transfer','STC Pay','POS','Cheque'];
@@ -347,7 +348,7 @@ function splitTeam(t) { return (t || '').split(',').map(x => x.trim()).filter(Bo
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   ['jobs','report','money','customers','staff','month','docs'].forEach(t => $('tab-' + t).hidden = t !== b.dataset.tab);
-  if (b.dataset.tab === 'month') loadMonth();
+  if (b.dataset.tab === 'month' && !b.hidden) loadMonth();
   if (b.dataset.tab === 'customers') loadCustomers();
 });
 
@@ -873,6 +874,10 @@ async function show() {
   $('app').hidden = !session;
   if (!session) return;
   $('who').textContent = session.user.email;
+  // Profit and month totals are for the owner only.
+  const owner = (session.user.email || '').toLowerCase() === OWNER_EMAIL;
+  document.querySelector('.tabs button[data-tab="month"]').hidden = !owner;
+  if (!owner && !$('tab-month').hidden) document.querySelector('.tabs button[data-tab="jobs"]').click();
   await Promise.all([loadStaff(), loadCustomers()]);
   loadJobs(); loadReports(); loadMoney(); loadDocs();
 }
