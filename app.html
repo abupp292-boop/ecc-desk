@@ -22,6 +22,7 @@ button{width:100%;padding:13px;border:0;border-radius:10px;background:#00d4aa;co
 .ghost{width:auto;padding:8px 14px;background:transparent;color:#00d4aa;border:1px solid #00d4aa}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.grid2>div{min-width:0}
 .msg{color:#ff8080;text-align:center;min-height:18px;margin:6px 0 0}
 .ok{color:#00d4aa}
 .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0 14px}
@@ -59,6 +60,8 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
 .scanbtn{display:block;text-align:center;background:#1a1a2e;border:2px dashed #00d4aa;color:#00d4aa;border-radius:10px;padding:14px;font-size:16px;font-weight:bold;margin-bottom:8px;cursor:pointer}
 .prev{display:block;max-width:100%;max-height:260px;border-radius:10px;margin:0 auto 10px}
 .st{width:auto;padding:4px 6px;margin:0;font-size:13px;border-radius:8px}
+.os-paid{color:#00d4aa}.os-part{color:#ffb84d}.os-open{color:#7fb3ff}.os-unpaid{color:#ff8080}.os-none{color:#aaa}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.filters button{width:auto;padding:7px 12px;font-size:13px;background:#1a1a2e;color:#aaa;border:1px solid #444}.filters button.on{background:#00d4aa;color:#1a1a2e;border-color:#00d4aa}
 .st-pending{color:#ffb84d}.st-done{color:#00d4aa}.st-paid{color:#7fb3ff}.st-np{color:#ff8080}
 [hidden]{display:none!important}
 </style>
@@ -86,6 +89,7 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
       <button data-tab="report">📋 Report</button>
       <button data-tab="money">💰 Money</button>
       <button data-tab="customers">🏢 Customers</button>
+      <button data-tab="orders">📑 Orders</button>
       <button data-tab="staff">👷 Staff</button>
       <button data-tab="month">📊 Month</button>
       <button data-tab="docs">📄 Docs</button>
@@ -165,6 +169,7 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
             <label>Date</label><input id="pDate" type="date">
             <label>Customer</label><select id="pCust"></select>
             <label>Job (optional)</label><select id="pJob"></select>
+            <label>Quotation / PO / invoice (optional)</label><select id="pOrder"></select>
             <div class="grid2">
               <div><label>Amount (SAR)</label><input id="pAmount" type="number" inputmode="decimal"></div>
               <div><label>Method</label><select id="pMethod"></select></div>
@@ -231,6 +236,54 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
         <p class="small" id="cTotal"></p>
         <p class="small">Sorted by balance (billed − received). Tap a customer to see the ledger.</p>
         <ul id="customers"></ul>
+      </div>
+    </section>
+
+    <!-- ORDERS: quotations, POs, invoices -->
+    <section id="tab-orders" hidden>
+      <div class="card">
+        <div class="stats">
+          <div>Open POs<b id="oOpen">0</b></div>
+          <div>Received<b id="oPaid">0</b></div>
+          <div>To collect<b id="oDue" class="warn">0</b></div>
+        </div>
+        <p class="small" style="text-align:center;margin:8px 0 0">Quotations, POs and invoices for every company, with payments and work dates.</p>
+      </div>
+      <div class="card">
+        <details id="oFormBox">
+          <summary>➕ New quotation / PO / invoice</summary>
+          <div style="margin-top:12px">
+            <div class="grid2">
+              <div><label>Type</label><select id="oKind"></select></div>
+              <div><label>Date</label><input id="oDate" type="date"></div>
+            </div>
+            <label>Company *</label><select id="oCust"></select>
+            <label>Number (quote / PO / invoice no.)</label><input id="oRef" placeholder="e.g. QUO-000234, 1272-APHO-L-001128">
+            <label>Linked to (optional)</label><select id="oParent"></select>
+            <label>Project / site</label><input id="oProject" placeholder="e.g. ACWA Power New Head Office">
+            <label>Work description</label><textarea id="oDesc" rows="3"></textarea>
+            <label>Contact person</label><input id="oContact">
+            <label>Amount (SAR, before VAT)</label><input id="oAmount" type="number" inputmode="decimal" value="0">
+            <label class="chk"><input type="checkbox" id="oVat"> Add VAT 15%</label>
+            <p class="small" id="oVatPreview">No VAT · Total: 0.00 SAR</p>
+            <div class="grid2">
+              <div><label>Status</label><select id="oStatus"></select></div>
+              <div><label>Payment terms</label><input id="oTerms" placeholder="50% advance"></div>
+              <div><label>Work start</label><input id="oStart" type="date"></div>
+              <div><label>Work end</label><input id="oEnd" type="date"></div>
+            </div>
+            <label class="scanbtn">📎 Add PDF or photo (PO, quote, invoice)<input type="file" id="oFile" accept="image/*,application/pdf" hidden></label>
+            <p class="small" id="oFileName"></p>
+            <label>Notes</label><textarea id="oNotes" rows="2"></textarea>
+            <button id="btnOrder">Save</button>
+            <p id="oMsg" class="msg"></p>
+          </div>
+        </details>
+      </div>
+      <div class="card">
+        <input id="oSearch" placeholder="🔍 Search company, number or project">
+        <div class="filters" id="oFilters"></div>
+        <ul id="orders"></ul>
       </div>
     </section>
 
@@ -347,9 +400,10 @@ function splitTeam(t) { return (t || '').split(',').map(x => x.trim()).filter(Bo
 // Tabs
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-  ['jobs','report','money','customers','staff','month','docs'].forEach(t => $('tab-' + t).hidden = t !== b.dataset.tab);
+  ['jobs','report','money','customers','orders','staff','month','docs'].forEach(t => $('tab-' + t).hidden = t !== b.dataset.tab);
   if (b.dataset.tab === 'month' && !b.hidden) loadMonth();
   if (b.dataset.tab === 'customers') loadCustomers();
+  if (b.dataset.tab === 'orders') loadOrders();
 });
 
 function vatPreview() {
@@ -382,17 +436,20 @@ async function fetchAll(table, cols) {
 const vatText = j => j.with_vat === undefined ? ' (VAT ' + sar(j.vat) + ')' : (j.with_vat ? ' (VAT ' + sar(j.vat) + ')' : ' (no VAT)');
 let custBal = {};
 async function loadCustomers() {
-  const [c, j, p] = await Promise.all([fetchAll('customers', '*'), fetchAll('jobs', 'customer_id, total'), fetchAll('payments', 'customer_id, amount')]);
+  const [c, j, p, o] = await Promise.all([fetchAll('customers', '*'), fetchAll('jobs', 'customer_id, total'), fetchAll('payments', 'customer_id, amount'), fetchAll('orders', 'customer_id, kind, total')]);
   if (c.error) { $('customers').textContent = 'Error: ' + c.error.message; return; }
   customers = c.data.sort((a, b) => (a.company_name || '').localeCompare(b.company_name || ''));
   const billed = {}, paid = {};
   j.data.forEach(x => { if (x.customer_id) billed[x.customer_id] = (billed[x.customer_id] || 0) + Number(x.total || 0); });
   p.data.forEach(x => { if (x.customer_id) paid[x.customer_id] = (paid[x.customer_id] || 0) + Number(x.amount || 0); });
+  // invoices and credit notes count as billed (POs and quotations do not)
+  (o.data || []).forEach(x => { if (x.customer_id && (x.kind === 'Invoice' || x.kind === 'Credit note')) billed[x.customer_id] = (billed[x.customer_id] || 0) + Number(x.total || 0); });
   custBal = {}; customers.forEach(x => custBal[x.id] = { billed: billed[x.id] || 0, paid: paid[x.id] || 0 });
   renderCustomers();
   const opts = customers.map(x => ({ value: x.id, label: x.company_name + (x.phone ? ' (' + x.phone + ')' : '') }));
   fill($('jCust'), opts, '— Select customer —');
   fill($('pCust'), opts, '— Select customer —');
+  fill($('oCust'), opts, '— Select company —');
 }
 function renderCustomers() {
   const ul = $('customers'); ul.innerHTML = '';
@@ -417,14 +474,17 @@ function renderCustomers() {
 async function toggleLedger(el, c) {
   const old = el.querySelector('.ledger'); if (old) { old.remove(); return; }
   const box = document.createElement('div'); box.className = 'ledger'; box.textContent = 'Loading...'; el.appendChild(box);
-  const [j, p] = await Promise.all([
+  const [j, p, ord] = await Promise.all([
     sb.from('jobs').select('job_date, site_name, holes, meters, total, status').eq('customer_id', c.id).order('job_date', {ascending:false}),
-    sb.from('payments').select('pay_date, amount, method').eq('customer_id', c.id).order('pay_date', {ascending:false})
+    sb.from('payments').select('pay_date, amount, method, notes').eq('customer_id', c.id).order('pay_date', {ascending:false}),
+    sb.from('orders').select('kind, ref_no, order_date, total, status, project').eq('customer_id', c.id)
   ]);
+
   box.innerHTML = '';
   if (j.error || p.error) { box.textContent = 'Error: ' + (j.error || p.error).message; return; }
   const rows = j.data.map(x => ({ d: x.job_date, t: '🏗️ ' + (x.site_name || 'Job') + (x.holes ? ' · ' + x.holes + ' holes' : '') + (Number(x.meters) ? ' · ' + x.meters + ' m' : '') + ' · ' + x.status, v: '+' + sar(x.total), cls: 'num warn' }))
-    .concat(p.data.map(x => ({ d: x.pay_date, t: '💰 Payment · ' + (x.method || ''), v: '−' + sar(x.amount), cls: 'num tag' })))
+    .concat(p.data.map(x => ({ d: x.pay_date, t: '💰 Payment · ' + (x.method || '') + (x.notes && /SAB|Paid into/.test(x.notes) ? ' · ' + x.notes : ''), v: '−' + sar(x.amount), cls: 'num tag' })))
+    .concat((ord.data || []).map(x => ({ d: x.order_date, t: '📑 ' + x.kind + ' ' + (x.ref_no || '') + (x.project ? ' · ' + x.project : '') + ' · ' + x.status, v: sar(x.total), cls: 'num' })))
     .sort((a, b) => (b.d || '').localeCompare(a.d || ''));
   const cb = custBal[c.id] || { billed: 0, paid: 0 };
   box.appendChild(kv('Billed', sar(cb.billed) + ' SAR'));
@@ -721,11 +781,11 @@ $('btnPay').onclick = async () => {
   setMsg('pMsg', 'Saving...', true);
   const { error } = await sb.from('payments').insert({
     pay_date: $('pDate').value || null, customer_id: Number($('pCust').value),
-    job_id: $('pJob').value ? Number($('pJob').value) : null, amount: amt,
+    job_id: $('pJob').value ? Number($('pJob').value) : null, order_id: $('pOrder').value ? Number($('pOrder').value) : null, amount: amt,
     method: $('pMethod').value, notes: $('pNotes').value.trim() || null
   });
   if (error) return setMsg('pMsg', 'Error: ' + error.message);
-  $('pAmount').value = ''; $('pNotes').value = ''; $('pJob').value = '';
+  $('pAmount').value = ''; $('pNotes').value = ''; $('pJob').value = ''; $('pOrder').value = '';
   setMsg('pMsg', '✅ Saved', true);
   loadMoney();
 };
@@ -754,6 +814,158 @@ $('btnExp').onclick = async () => {
   scanBlob = null; $('ePrev').hidden = true; $('eScanMsg').textContent = '';
   setMsg('eMsg', '✅ Saved', true);
   loadMoney();
+};
+
+// ---------- ORDERS (quotations, POs, invoices) ----------
+const O_KINDS = ['Quotation','PO','Invoice','Credit note'];
+const O_STATUS = ['Quoted','PO received','Work started','Work done','Invoiced','Part paid','Paid','Unpaid','Check payment','Cancelled'];
+fill($('oKind'), O_KINDS); fill($('oStatus'), O_STATUS);
+$('oKind').value = 'PO'; $('oStatus').value = 'PO received'; $('oDate').value = today();
+$('oKind').onchange = () => { $('oStatus').value = { Quotation: 'Quoted', PO: 'PO received', Invoice: 'Unpaid', 'Credit note': 'Invoiced' }[$('oKind').value]; };
+let ordersCache = [], oPaid = {}, oFilter = 'All', orderFile = null;
+const oTotal = (a, v) => Number(a || 0) + (v ? Number(a || 0) * 0.15 : 0);
+function oVatPreview() { const a = Number($('oAmount').value || 0), v = $('oVat').checked;
+  $('oVatPreview').textContent = v ? 'VAT 15%: ' + sar(a * 0.15) + ' · Total: ' + sar(a * 1.15) + ' SAR' : 'No VAT · Total: ' + sar(a) + ' SAR'; }
+$('oAmount').oninput = oVatPreview; $('oVat').onchange = oVatPreview;
+$('oCust').onchange = () => { const c = customers.find(x => String(x.id) === $('oCust').value); $('oVat').checked = !!(c && c.needs_vat); oVatPreview(); fillParents(); };
+function fillParents() {
+  const cid = $('oCust').value;
+  fill($('oParent'), ordersCache.filter(o => String(o.customer_id) === cid).map(o => ({ value: o.id, label: o.kind + ' ' + (o.ref_no || '#' + o.id) + ' · ' + sar(o.total) })), '— None —');
+}
+$('oFile').onchange = async () => {
+  const f = $('oFile').files[0]; orderFile = null; $('oFileName').textContent = '';
+  if (!f) return;
+  try { orderFile = f.type.startsWith('image/') ? await shrink(f, 2000) : f; $('oFileName').textContent = '📎 ' + f.name + ' (' + Math.round(orderFile.size / 1024) + ' KB)'; }
+  catch (e) { $('oFileName').textContent = 'Could not read file: ' + e.message; }
+};
+async function uploadOrderFile(file) {
+  const pdf = file.type === 'application/pdf';
+  const path = 'orders/' + today().slice(0, 7) + '/' + Date.now() + (pdf ? '.pdf' : '.jpg');
+  const up = await sb.storage.from('documents').upload(path, file, { contentType: pdf ? 'application/pdf' : 'image/jpeg' });
+  if (up.error) throw new Error(up.error.message);
+  return { file_path: path, file_type: pdf ? 'pdf' : 'image' };
+}
+function oClass(o, paid) {
+  if (o.kind === 'Credit note' || o.status === 'Cancelled') return 'os-none';
+  if (o.kind === 'Quotation') return 'os-open';
+  if (paid >= o.total - 1) return 'os-paid';
+  if (paid > 0) return 'os-part';
+  return o.kind === 'PO' ? 'os-open' : 'os-unpaid';
+}
+async function loadOrders() {
+  const [o, p] = await Promise.all([fetchAll('orders', '*, customers(company_name)'), fetchAll('payments', 'order_id, amount, pay_date, method, notes')]);
+  const ul = $('orders');
+  if (o.error) { ul.innerHTML = ''; ul.textContent = /relation|does not exist|schema cache/i.test(o.error.message) ? 'Orders not set up yet.' : 'Error: ' + o.error.message; return; }
+  ordersCache = o.data;
+  oPaid = {}; p.data.forEach(x => { if (x.order_id) (oPaid[x.order_id] = oPaid[x.order_id] || []).push(x); });
+  // money received on an invoice also counts for the PO it came from
+  const paidOf = id => (oPaid[id] || []).reduce((a, x) => a + Number(x.amount || 0), 0) + ordersCache.filter(c => c.parent_id === id).reduce((a, c) => a + (oPaid[c.id] || []).reduce((b, x) => b + Number(x.amount || 0), 0), 0);
+  ordersCache.forEach(x => x._paid = paidOf(x.id));
+  const open = ordersCache.filter(x => x.kind === 'PO' && !/Paid|Cancelled/.test(x.status));
+  $('oOpen').textContent = sar(open.reduce((a, x) => a + Number(x.total), 0));
+  $('oPaid').textContent = sar(ordersCache.filter(x => x.kind === 'Invoice').reduce((a, x) => a + x._paid, 0));
+  $('oDue').textContent = sar(ordersCache.filter(x => x.kind === 'Invoice' && x.status !== 'Cancelled').reduce((a, x) => a + Math.max(Number(x.total) - x._paid, 0), 0));
+  const f = $('oFilters'); f.innerHTML = '';
+  ['All','Quotation','PO','Invoice','Not paid'].forEach(k => { const b = document.createElement('button'); b.textContent = k; b.className = k === oFilter ? 'on' : '';
+    b.onclick = () => { oFilter = k; loadOrders(); }; f.appendChild(b); });
+  renderOrders(); fillParents();
+  fill($('pOrder'), ordersCache.filter(x => x.kind !== 'Quotation').sort((a, b) => (b.order_date || '').localeCompare(a.order_date || ''))
+    .map(x => ({ value: x.id, label: x.kind + ' ' + (x.ref_no || '#' + x.id) + ' · ' + (x.customers ? x.customers.company_name : '') + ' · ' + sar(x.total) })), '— None —');
+}
+function renderOrders() {
+  const ul = $('orders'); ul.innerHTML = '';
+  const q = $('oSearch').value.trim().toLowerCase();
+  let list = ordersCache.filter(x => {
+    if (oFilter === 'Not paid') { if (x.kind !== 'Invoice' || x._paid >= Number(x.total) - 1 || x.status === 'Cancelled') return false; }
+    else if (oFilter !== 'All' && x.kind !== oFilter) return false;
+    if (!q) return true;
+    return [x.ref_no, x.project, x.description, x.customers && x.customers.company_name].some(v => (v || '').toLowerCase().includes(q));
+  }).sort((a, b) => (b.order_date || '').localeCompare(a.order_date || '') || b.id - a.id);
+  if (!list.length) empty(ul, q ? 'No match' : 'Nothing here yet — tap "New quotation / PO / invoice" above');
+  list.slice(0, 150).forEach(x => {
+    const bal = Number(x.total) - x._paid;
+    const el = li((x.file_path ? '📎 ' : '') + x.kind + ' ' + (x.ref_no || '') + ' — ' + (x.customers ? x.customers.company_name : '?'), sar(x.total) + ' SAR',
+      [x.order_date, x.project, x.status, x.work_start ? 'Start ' + x.work_start : '', x.work_end ? 'End ' + x.work_end : '',
+       x.kind !== 'Quotation' && x.kind !== 'Credit note' ? 'Received ' + sar(x._paid) + ' · Balance ' + sar(bal) : ''].filter(Boolean).join(' · '), 'num ' + oClass(x, x._paid));
+    el.style.cursor = 'pointer';
+    el.onclick = e => { if (e.target.closest('.ledger')) return; orderDetail(el, x); };
+    ul.appendChild(el);
+  });
+  if (list.length > 150) ul.appendChild(li('Showing latest 150', '', 'Search to find older ones'));
+}
+$('oSearch').oninput = renderOrders;
+function orderDetail(el, x) {
+  const old = el.querySelector('.ledger'); if (old) { old.remove(); return; }
+  const box = document.createElement('div'); box.className = 'ledger';
+  box.appendChild(kv('Amount before VAT', sar(x.amount) + ' SAR'));
+  box.appendChild(kv('VAT', sar(x.vat) + ' SAR'));
+  box.appendChild(kv('Total', sar(x.total) + ' SAR'));
+  if (x.kind !== 'Quotation' && x.kind !== 'Credit note') { box.appendChild(kv('Received', sar(x._paid) + ' SAR', 'ok')); box.appendChild(kv('Balance', sar(Number(x.total) - x._paid) + ' SAR', Number(x.total) - x._paid > 1 ? 'warn' : 'ok')); }
+  const parent = ordersCache.find(o => o.id === x.parent_id), kids = ordersCache.filter(o => o.parent_id === x.id);
+  [['Description', x.description], ['Contact', x.contact_person], ['Payment terms', x.payment_terms], ['Notes', x.notes],
+   ['Linked to', parent ? parent.kind + ' ' + (parent.ref_no || '') : ''], ['Linked', kids.map(k => k.kind + ' ' + (k.ref_no || '')).join(', ')]]
+    .forEach(([k, v]) => { if (v) { const d = document.createElement('div'); d.className = 'small'; d.textContent = k + ': ' + v; box.appendChild(d); } });
+  const pays = (oPaid[x.id] || []).slice().sort((a, b) => (b.pay_date || '').localeCompare(a.pay_date || ''));
+  if (pays.length) { const pu = document.createElement('ul'); pays.forEach(y => pu.appendChild(li('💰 ' + (y.method || '') + (y.notes ? ' · ' + y.notes : ''), sar(y.amount), y.pay_date, 'num tag'))); box.appendChild(pu); }
+  // actions
+  const act = document.createElement('div'); act.className = 'docact';
+  const st = document.createElement('select'); st.className = 'st'; fill(st, O_STATUS.includes(x.status) ? O_STATUS : O_STATUS.concat([x.status])); st.value = x.status;
+  st.onchange = async () => { const { error } = await sb.from('orders').update({ status: st.value }).eq('id', x.id); if (error) return alertRow(box, 'Error: ' + error.message); x.status = st.value; };
+  act.appendChild(st);
+  if (x.file_path) { const v = document.createElement('button'); v.textContent = '👁️ View file'; v.onclick = () => openDoc(x.file_path); act.appendChild(v); }
+  else { const fl = document.createElement('label'); fl.textContent = '📎 Add file'; const fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*,application/pdf'; fi.hidden = true; fl.appendChild(fi);
+    fi.onchange = async () => { const f = fi.files[0]; if (!f) return; fl.firstChild.textContent = 'Uploading...';
+      try { const blob = f.type.startsWith('image/') ? await shrink(f, 2000) : f; const u = await uploadOrderFile(blob);
+        const { error } = await sb.from('orders').update(u).eq('id', x.id); if (error) throw error; loadOrders(); }
+      catch (e) { alertRow(box, 'Error: ' + e.message); fl.firstChild.textContent = '📎 Add file'; } };
+    act.appendChild(fl); }
+  if (x.kind === 'Quotation' || x.kind === 'PO') { const mk = document.createElement('button'); mk.textContent = x.kind === 'Quotation' ? '➕ Add PO for this' : '➕ Add invoice for this';
+    mk.onclick = () => startFrom(x, x.kind === 'Quotation' ? 'PO' : 'Invoice'); act.appendChild(mk); }
+  box.appendChild(act);
+  // work dates + payment
+  const f2 = document.createElement('div'); f2.className = 'renew';
+  f2.innerHTML = '<div class="grid2"><div><label>Work start</label><input type="date" class="ws"></div><div><label>Work end</label><input type="date" class="we"></div></div><button class="wsave">Save work dates</button>' +
+    (x.kind === 'Quotation' ? '' : '<hr style="border-color:#333;margin:12px 0"><div class="grid2"><div><label>Payment (SAR)</label><input type="number" inputmode="decimal" class="pa"></div><div><label>Date</label><input type="date" class="pd"></div></div><select class="pm"></select><input class="pn" placeholder="Note (e.g. SAB transfer, cheque no.)"><button class="psave">Save payment</button>') + '<p class="msg wmsg"></p>';
+  f2.querySelector('.ws').value = x.work_start || ''; f2.querySelector('.we').value = x.work_end || '';
+  const m = f2.querySelector('.wmsg');
+  f2.querySelector('.wsave').onclick = async () => { const { error } = await sb.from('orders').update({ work_start: f2.querySelector('.ws').value || null, work_end: f2.querySelector('.we').value || null }).eq('id', x.id);
+    m.className = error ? 'msg wmsg' : 'msg ok wmsg'; m.textContent = error ? 'Error: ' + error.message : '✅ Saved'; if (!error) { x.work_start = f2.querySelector('.ws').value || null; x.work_end = f2.querySelector('.we').value || null; } };
+  if (x.kind !== 'Quotation') {
+    fill(f2.querySelector('.pm'), METHODS); f2.querySelector('.pm').value = 'Bank transfer'; f2.querySelector('.pd').value = today();
+    f2.querySelector('.psave').onclick = async () => { const a = Number(f2.querySelector('.pa').value || 0); if (a <= 0) { m.textContent = 'Enter the amount'; return; }
+      const { error } = await sb.from('payments').insert({ customer_id: x.customer_id, order_id: x.id, pay_date: f2.querySelector('.pd').value || today(), amount: a, method: f2.querySelector('.pm').value, notes: f2.querySelector('.pn').value.trim() || null });
+      if (error) { m.className = 'msg wmsg'; m.textContent = 'Error: ' + error.message; return; }
+      const paid = x._paid + a;
+      if (x.kind === 'Invoice') await sb.from('orders').update({ status: paid >= Number(x.total) - 1 ? 'Paid' : 'Part paid' }).eq('id', x.id);
+      loadOrders(); };
+  }
+  box.appendChild(f2);
+  el.appendChild(box);
+}
+function startFrom(x, kind) {
+  $('oKind').value = kind; $('oStatus').value = kind === 'PO' ? 'PO received' : 'Unpaid';
+  $('oCust').value = String(x.customer_id); fillParents(); $('oParent').value = String(x.id);
+  $('oProject').value = x.project || ''; $('oDesc').value = x.description || ''; $('oContact').value = x.contact_person || '';
+  $('oAmount').value = x.amount; $('oVat').checked = Number(x.vat) > 0; oVatPreview(); $('oTerms').value = x.payment_terms || '';
+  $('oRef').value = ''; $('oDate').value = today();
+  $('oFormBox').open = true; $('oFormBox').scrollIntoView({ behavior: 'smooth' });
+}
+$('btnOrder').onclick = async () => {
+  if (!$('oCust').value) return setMsg('oMsg', 'Select the company');
+  const a = Number($('oAmount').value || 0);
+  setMsg('oMsg', 'Saving...', true);
+  let fileInfo = {};
+  try { if (orderFile) fileInfo = await uploadOrderFile(orderFile); } catch (e) { return setMsg('oMsg', 'File upload error: ' + e.message); }
+  const sign = $('oKind').value === 'Credit note' ? -1 : 1;
+  const { error } = await sb.from('orders').insert({ customer_id: Number($('oCust').value), kind: $('oKind').value, ref_no: $('oRef').value.trim() || null,
+    order_date: $('oDate').value || null, parent_id: $('oParent').value ? Number($('oParent').value) : null, project: $('oProject').value.trim() || null,
+    description: $('oDesc').value.trim() || null, contact_person: $('oContact').value.trim() || null, amount: sign * Math.abs(a),
+    vat: $('oVat').checked ? sign * Math.abs(Math.round(a * 15) / 100) : 0, status: $('oStatus').value, payment_terms: $('oTerms').value.trim() || null,
+    work_start: $('oStart').value || null, work_end: $('oEnd').value || null, notes: $('oNotes').value.trim() || null, ...fileInfo });
+  if (error) return setMsg('oMsg', 'Error: ' + error.message);
+  ['oRef','oProject','oDesc','oContact','oTerms','oStart','oEnd','oNotes'].forEach(id => $(id).value = '');
+  $('oAmount').value = 0; $('oVat').checked = false; oVatPreview(); orderFile = null; $('oFile').value = ''; $('oFileName').textContent = '';
+  setMsg('oMsg', '✅ Saved', true); loadOrders();
 };
 
 // ---------- AUTH ----------
@@ -879,7 +1091,7 @@ async function show() {
   document.querySelector('.tabs button[data-tab="month"]').hidden = !owner;
   if (!owner && !$('tab-month').hidden) document.querySelector('.tabs button[data-tab="jobs"]').click();
   await Promise.all([loadStaff(), loadCustomers()]);
-  loadJobs(); loadReports(); loadMoney(); loadDocs();
+  loadJobs(); loadReports(); loadMoney(); loadDocs(); loadOrders();
 }
 
 $('login').onsubmit = async (e) => {
