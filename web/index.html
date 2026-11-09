@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ECC Desk">
+<meta name="theme-color" content="#1a1a2e">
+<title>ECC Desk</title>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="logo">🏗️</span><div><h1>ECC Desk</h1><p class="sub">Easy Core Cut General Contracting</p></div></div>
+  </header>
+
+  <!-- LOGIN -->
+  <form id="login" class="card" method="post" action="#" hidden>
+    <h2>Login</h2>
+    <input id="email" name="email" type="email" placeholder="Email" autocomplete="username" required>
+    <input id="pass" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit" class="main-btn">Login</button>
+    <p id="msg" class="msg"></p>
+  </form>
+
+  <!-- HOME -->
+  <main id="home" hidden>
+    <div class="who-row"><span id="who" class="small"></span><button id="btnOut" class="link-btn">Logout</button></div>
+
+    <div class="search card">
+      <input id="q" type="search" placeholder="🔍 Customer, mobile, site or order no." autocomplete="off" enterkeyhint="search">
+      <ul id="results" class="results" hidden></ul>
+    </div>
+
+    <div class="quick">
+      <a class="qbtn" data-go="jobs" data-open="1">➕<span>New job</span></a>
+      <a class="qbtn" data-go="report" data-open="1">📋<span>Daily report</span></a>
+      <a class="qbtn owner-only" data-go="money" data-open="2" hidden>🧾<span>Expense</span></a>
+    </div>
+
+    <div id="alerts"></div>
+
+    <div class="today card">
+      <div><b id="sJobs">–</b><span>Jobs today</span></div>
+      <div><b id="sOrders">–</b><span>Open orders</span></div>
+      <div><b id="sDocs">–</b><span>Docs due</span></div>
+    </div>
+    <div class="today card owner-only" hidden>
+      <div><b id="sIn">–</b><span>Received this month</span></div>
+      <div><b id="sOut">–</b><span>Expenses this month</span></div>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+  </main>
+
+  <!-- SECTION -->
+  <section id="section" hidden>
+    <button id="back" class="back">← Home</button>
+    <h2 id="secTitle" class="sec-title"></h2>
+    <div class="menu" id="secMenu"></div>
+  </section>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

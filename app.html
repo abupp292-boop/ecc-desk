@@ -82,7 +82,7 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
 
   <!-- APP -->
   <div id="app" hidden>
-    <div class="row"><span id="who" class="small"></span><button id="btnOut" class="ghost">Logout</button></div>
+    <div class="row"><a href="new/" class="ghost" style="text-decoration:none;border-radius:10px">🏠 Home</a><span id="who" class="small"></span><button id="btnOut" class="ghost">Logout</button></div>
 
     <div class="tabs">
       <button data-tab="jobs" class="on">🏗️ Jobs</button>
@@ -1092,7 +1092,27 @@ async function show() {
   if (!owner && !$('tab-month').hidden) document.querySelector('.tabs button[data-tab="jobs"]').click();
   await Promise.all([loadStaff(), loadCustomers()]);
   loadJobs(); loadReports(); loadMoney(); loadDocs(); loadOrders();
+  openFromLink();
 }
+
+// Links from the new Home screen: app.html#tab=jobs&open=1&q=text
+// tab = which tab to show, open = which "➕" form in that tab to open, q = text for the tab's search box.
+function openFromLink() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  const tab = p.get('tab');
+  const btn = tab && document.querySelector('.tabs button[data-tab="' + tab.replace(/[^a-z]/g, '') + '"]');
+  if (!btn || btn.hidden) return;
+  btn.click();
+  const sec = $('tab-' + btn.dataset.tab);
+  const n = Number(p.get('open'));
+  const box = n > 0 && sec.querySelectorAll('details')[n - 1];
+  if (box) { box.open = true; box.scrollIntoView(); }
+  const q = p.get('q');
+  const input = q && sec.querySelector('input[id$="Search"]');
+  if (input) { input.value = q; input.dispatchEvent(new Event('input')); }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+window.addEventListener('hashchange', () => { if (!$('app').hidden) openFromLink(); });
 
 $('login').onsubmit = async (e) => {
   e.preventDefault();
