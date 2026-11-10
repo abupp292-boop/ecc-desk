@@ -6,9 +6,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ECC Desk">
 <meta name="theme-color" content="#1a1a2e">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" type="image/png" href="./icon-192.png">
 <title>ECC Desk</title>
-  <script type="module" crossorigin src="./assets/index-BUjFnBVU.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-DUEr20Oq.css">
+  <script type="module" crossorigin src="./assets/index-ODbD_ZGC.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-D-HNoYWU.css">
 </head>
 <body>
 <div class="wrap">
@@ -60,6 +63,19 @@
     <button id="back" class="back">← Home</button>
     <h2 id="secTitle" class="sec-title"></h2>
     <div class="menu" id="secMenu"></div>
+  </section>
+
+  <!-- MONEY RECORDS (owner only, read only) -->
+  <section id="view" hidden>
+    <button id="vBack" class="back">← Money</button>
+    <h2 id="vTitle" class="sec-title"></h2>
+    <div class="card">
+      <label class="lbl" for="vMonth">Month</label>
+      <input id="vMonth" type="month">
+      <input id="vQ" type="search" placeholder="🔍 Search in this month" autocomplete="off" style="margin:0">
+    </div>
+    <div class="today card" id="vStats"></div>
+    <div class="card"><p class="small" id="vCount" style="margin:0 0 6px"></p><ul id="vList" class="vlist"></ul></div>
   </section>
 </div>
 </body>

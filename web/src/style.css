@@ -79,3 +79,14 @@ button { font-family: inherit; cursor: pointer; }
 .mbtn small { display: block; font-weight: normal; color: var(--muted); font-size: 14px; margin-top: 3px; }
 .mbtn:active { transform: translateY(2px); }
 .soon { opacity: .5; pointer-events: none; }
+
+/* Money records */
+.lbl { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+.today b.out, .vlist b.out { color: var(--bad); }
+.vlist { list-style: none; margin: 0; padding: 0; color: var(--muted); }
+.vlist li { padding: 12px 0; border-top: 1px solid var(--line); color: var(--text); }
+.vlist li:first-child { border-top: 0; }
+.vr { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.vr .t { min-width: 0; overflow-wrap: anywhere; }
+.vr b { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--accent); }
+.vlist .s { color: var(--muted); font-size: 14px; margin-top: 4px; overflow-wrap: anywhere; }

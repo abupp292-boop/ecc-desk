@@ -38,6 +38,9 @@ const SECTIONS = {
       { ico: '💵', name: 'Payment received', sub: 'Add a customer payment', href: () => oldApp('money', { open: 1 }) },
       { ico: '🧾', name: 'Expense / scan invoice', sub: 'Add an expense with photo', href: () => oldApp('money', { open: 2 }) },
       { ico: '📒', name: 'Recent payments & expenses', sub: 'Latest 30 of each', href: () => oldApp('money') },
+      { ico: '🏦', name: 'Bank', sub: 'Money in and out of the bank', href: () => '#bank' },
+      { ico: '👛', name: 'Cash', sub: 'Cash collected and paid', href: () => '#cash' },
+      { ico: '🧮', name: 'VAT invoices', sub: 'Sales and purchase invoices, VAT', href: () => '#vat' },
     ],
   },
   people: {
@@ -103,12 +106,98 @@ function renderSection(key) {
 function route() {
   const key = location.hash.slice(1);
   const sec = SECTIONS[key] && (!SECTIONS[key].owner || isOwner) ? key : '';
-  $('home').hidden = !!sec;
+  const view = VIEWS[key] && isOwner ? key : '';
+  $('home').hidden = !!(sec || view);
   $('section').hidden = !sec;
+  $('view').hidden = !view;
   if (sec) { renderSection(sec); window.scrollTo(0, 0); }
+  if (view) { openView(view); window.scrollTo(0, 0); }
 }
 window.addEventListener('hashchange', route);
 $('back').onclick = () => { location.hash = ''; };
+$('vBack').onclick = () => { location.hash = 'money'; };
+
+// ---------- Owner-only money records (read only): Bank, Cash, VAT invoices ----------
+const VIEWS = {
+  bank: { title: '🏦 Bank', table: 'bank_entries', date: 'entry_date' },
+  cash: { title: '👛 Cash', table: 'cash_entries', date: 'entry_date' },
+  vat: { title: '🧮 VAT invoices', table: 'vat_invoices', date: 'inv_date', vat: true },
+};
+const sar2 = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let curView = '', viewRows = [];
+
+async function openView(key) {
+  const v = VIEWS[key];
+  curView = key;
+  $('vTitle').textContent = v.title;
+  $('vQ').value = '';
+  if (!v.month) {
+    // start on the newest month that has records
+    const { data } = await sb.from(v.table).select(v.date).order(v.date, { ascending: false }).limit(1);
+    v.month = (data && data[0] ? data[0][v.date] : today()).slice(0, 7);
+  }
+  if (curView !== key) return;
+  $('vMonth').value = v.month;
+  loadView();
+}
+
+async function loadView() {
+  const key = curView, v = VIEWS[key];
+  const [y, m] = v.month.split('-').map(Number);
+  const to = m === 12 ? (y + 1) + '-01-01' : y + '-' + String(m + 1).padStart(2, '0') + '-01';
+  $('vList').textContent = 'Loading...';
+  const { data, error } = await sb.from(v.table).select('*').gte(v.date, v.month + '-01').lt(v.date, to)
+    .order(v.date, { ascending: false }).order('id', { ascending: false }).limit(1000);
+  if (curView !== key) return;
+  if (error) { $('vStats').innerHTML = ''; $('vList').textContent = 'Error: ' + error.message; return; }
+  viewRows = data;
+  renderView();
+}
+
+function stat(label, value, cls) {
+  const d = document.createElement('div');
+  d.innerHTML = '<b></b><span></span>';
+  d.firstChild.textContent = value; d.lastChild.textContent = label;
+  if (cls) d.firstChild.className = cls;
+  return d;
+}
+
+function renderView() {
+  const v = VIEWS[curView];
+  const q = $('vQ').value.trim().toLowerCase();
+  const rows = viewRows.filter((r) => !q || [r.note, r.party, r.inv_no, r.vat_no, r.type].some((x) => (x || '').toLowerCase().includes(q)));
+  const sum = (list, f) => list.reduce((a, r) => a + Number(r[f] || 0), 0);
+  const stats = $('vStats'); stats.innerHTML = '';
+  if (v.vat) {
+    const sales = rows.filter((r) => r.type === 'Sales'), buy = rows.filter((r) => r.type !== 'Sales');
+    stats.appendChild(stat('Sales (incl. VAT)', sar(sum(sales, 'total'))));
+    stats.appendChild(stat('Purchases & expenses', sar(sum(buy, 'total')), 'out'));
+    stats.appendChild(stat('VAT on sales − VAT paid', sar2(sum(sales, 'vat') - sum(buy, 'vat'))));
+  } else {
+    const inn = sum(rows.filter((r) => r.kind === 'in'), 'amount'), out = sum(rows.filter((r) => r.kind === 'out'), 'amount');
+    stats.appendChild(stat('In', sar(inn)));
+    stats.appendChild(stat('Out', sar(out), 'out'));
+    stats.appendChild(stat('In − Out', sar(inn - out), inn - out < 0 ? 'out' : ''));
+  }
+  const ul = $('vList'); ul.innerHTML = '';
+  rows.forEach((r) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<div class="vr"><span class="t"></span><b></b></div><div class="s"></div>';
+    const isOut = v.vat ? r.type !== 'Sales' : r.kind === 'out';
+    li.querySelector('.t').textContent = v.vat ? (r.party || r.type) : (r.note || (isOut ? 'Out' : 'In'));
+    const amt = li.querySelector('b');
+    amt.textContent = (isOut ? '− ' : '+ ') + sar2(v.vat ? r.total : r.amount);
+    if (isOut) amt.className = 'out';
+    li.querySelector('.s').textContent = v.vat
+      ? [r.inv_date, r.type, r.inv_no ? 'No. ' + r.inv_no : '', 'VAT ' + sar2(r.vat), r.note].filter(Boolean).join(' · ')
+      : r.entry_date;
+    ul.appendChild(li);
+  });
+  if (!rows.length) ul.textContent = q ? 'Nothing found in this month.' : 'No records in this month.';
+  $('vCount').textContent = rows.length + ' record(s)';
+}
+$('vMonth').onchange = () => { if (curView && $('vMonth').value) { VIEWS[curView].month = $('vMonth').value; loadView(); } };
+$('vQ').oninput = renderView;
 
 // ---------- Quick-add buttons ----------
 document.querySelectorAll('.qbtn').forEach((a) => {
@@ -189,7 +278,7 @@ async function search() {
 async function show() {
   const { data: { session } } = await sb.auth.getSession();
   $('login').hidden = !!session;
-  $('home').hidden = $('section').hidden = !session;
+  $('home').hidden = $('section').hidden = $('view').hidden = !session;
   if (!session) return;
   $('who').textContent = session.user.email;
   // Role comes from the database (profiles). Email check is only a fallback.
@@ -213,3 +302,8 @@ $('login').onsubmit = async (e) => {
 $('btnOut').onclick = async () => { await sb.auth.signOut(); location.hash = ''; show(); };
 
 show();
+
+// ---------- Install as a phone app (PWA) ----------
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
