@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="./icon-180.png">
 <link rel="icon" type="image/png" href="./icon-192.png">
 <title>ECC Desk</title>
-  <script type="module" crossorigin src="./assets/index-ODbD_ZGC.js"></script>
+  <script type="module" crossorigin src="./assets/index-YElDtFH4.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/index-D-HNoYWU.css">
 </head>
 <body>
@@ -31,6 +31,7 @@
   <!-- HOME -->
   <main id="home" hidden>
     <div class="who-row"><span id="who" class="small"></span><button id="btnOut" class="link-btn">Logout</button></div>
+    <p style="margin:-4px 0 12px"><a href="#password" class="small" style="color:var(--accent)">🔑 Change password</a></p>
 
     <div class="search card">
       <input id="q" type="search" placeholder="🔍 Customer, mobile, site or order no." autocomplete="off" enterkeyhint="search">
@@ -63,6 +64,22 @@
     <button id="back" class="back">← Home</button>
     <h2 id="secTitle" class="sec-title"></h2>
     <div class="menu" id="secMenu"></div>
+  </section>
+
+  <!-- CHANGE PASSWORD -->
+  <section id="pwd" hidden>
+    <button id="pBack" class="back">← Home</button>
+    <h2 class="sec-title">🔑 Change password</h2>
+    <form id="pwdForm" class="card" method="post" action="#">
+      <input id="pwdUser" name="username" type="email" autocomplete="username" readonly>
+      <label class="lbl" for="pwd1">New password (at least 8 characters)</label>
+      <input id="pwd1" name="new-password" type="password" autocomplete="new-password" minlength="8" required>
+      <label class="lbl" for="pwd2">Type it again</label>
+      <input id="pwd2" name="new-password-again" type="password" autocomplete="new-password" minlength="8" required>
+      <label class="small" style="display:flex;gap:8px;align-items:center;margin-bottom:12px"><input id="pwdShow" type="checkbox" style="width:22px;height:22px;margin:0"> Show password</label>
+      <button type="submit" class="main-btn">Save new password</button>
+      <p id="pwdMsg" class="msg"></p>
+    </form>
   </section>
 
   <!-- MONEY RECORDS (owner only, read only) -->

@@ -107,14 +107,33 @@ function route() {
   const key = location.hash.slice(1);
   const sec = SECTIONS[key] && (!SECTIONS[key].owner || isOwner) ? key : '';
   const view = VIEWS[key] && isOwner ? key : '';
-  $('home').hidden = !!(sec || view);
+  const pwd = key === 'password';
+  $('home').hidden = !!(sec || view || pwd);
   $('section').hidden = !sec;
   $('view').hidden = !view;
+  $('pwd').hidden = !pwd;
+  if (pwd) { $('pwdForm').reset(); $('pwdUser').value = $('who').textContent; $('pwdMsg').textContent = ''; window.scrollTo(0, 0); }
   if (sec) { renderSection(sec); window.scrollTo(0, 0); }
   if (view) { openView(view); window.scrollTo(0, 0); }
 }
 window.addEventListener('hashchange', route);
 $('back').onclick = () => { location.hash = ''; };
+$('pBack').onclick = () => { location.hash = ''; };
+
+// ---------- Change my own password (works only while logged in) ----------
+$('pwdShow').onchange = () => { $('pwd1').type = $('pwd2').type = $('pwdShow').checked ? 'text' : 'password'; };
+$('pwdForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const m = $('pwdMsg'), a = $('pwd1').value, b = $('pwd2').value;
+  m.className = 'msg';
+  if (a.length < 8) { m.textContent = 'Use at least 8 characters.'; return; }
+  if (a !== b) { m.textContent = 'The two passwords are not the same.'; return; }
+  m.className = 'msg ok'; m.textContent = 'Please wait...';
+  const { error } = await sb.auth.updateUser({ password: a });
+  if (error) { m.className = 'msg'; m.textContent = 'Not saved: ' + error.message; return; }
+  $('pwd1').value = $('pwd2').value = '';
+  m.textContent = '✅ Password changed. Use the new password next time you log in.';
+};
 $('vBack').onclick = () => { location.hash = 'money'; };
 
 // ---------- Owner-only money records (read only): Bank, Cash, VAT invoices ----------
@@ -278,7 +297,7 @@ async function search() {
 async function show() {
   const { data: { session } } = await sb.auth.getSession();
   $('login').hidden = !!session;
-  $('home').hidden = $('section').hidden = $('view').hidden = !session;
+  $('home').hidden = $('section').hidden = $('view').hidden = $('pwd').hidden = !session;
   if (!session) return;
   $('who').textContent = session.user.email;
   // Role comes from the database (profiles). Email check is only a fallback.
