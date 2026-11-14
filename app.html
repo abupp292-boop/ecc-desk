@@ -78,6 +78,16 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
     <input id="pass" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
     <button id="btnLogin" type="submit">Login</button>
     <p id="msg" class="msg"></p>
+    <button id="btnForgot" type="button" style="background:none;color:#aaa;text-decoration:underline">Forgot password?</button>
+  </form>
+
+  <!-- NEW PASSWORD (opens from the reset email link) -->
+  <form id="newpw" class="card" method="post" action="#" hidden>
+    <p class="sub">Choose a new password (8 or more characters)</p>
+    <input id="np1" type="password" placeholder="New password" autocomplete="new-password" minlength="8" required>
+    <input id="np2" type="password" placeholder="Type it again" autocomplete="new-password" minlength="8" required>
+    <button type="submit">Save new password</button>
+    <p id="npmsg" class="msg"></p>
   </form>
 
   <!-- APP -->
@@ -1082,6 +1092,7 @@ $('btnDoc').onclick = async () => {
 
 async function show() {
   const { data: { session } } = await sb.auth.getSession();
+  if (recovering && session) return showNewPw();
   $('login').hidden = !!session;
   $('app').hidden = !session;
   if (!session) return;
@@ -1119,6 +1130,27 @@ $('login').onsubmit = async (e) => {
   setMsg('msg', 'Please wait...', true);
   const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pass').value });
   setMsg('msg', error ? 'Wrong email or password' : '');
+  show();
+};
+// Forgot password: emails a reset link; the link opens this page and shows the new-password form.
+let recovering = /type=recovery/.test(location.hash + location.search);
+$('btnForgot').onclick = async () => {
+  const email = $('email').value.trim();
+  if (!email) return setMsg('msg', 'Type your email first, then tap Forgot password');
+  setMsg('msg', 'Please wait...', true);
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + '/app.html' });
+  setMsg('msg', error ? 'Could not send the email. Try again in a few minutes.' : 'Check your email and open the reset link.', !error);
+};
+function showNewPw() { recovering = true; $('login').hidden = true; $('app').hidden = true; $('newpw').hidden = false; }
+sb.auth.onAuthStateChange((ev) => { if (ev === 'PASSWORD_RECOVERY') showNewPw(); });
+$('newpw').onsubmit = async (e) => {
+  e.preventDefault();
+  if ($('np1').value !== $('np2').value) return setMsg('npmsg', 'The two passwords are not the same');
+  setMsg('npmsg', 'Please wait...', true);
+  const { error } = await sb.auth.updateUser({ password: $('np1').value });
+  if (error) return setMsg('npmsg', 'Could not save. Open the reset link again.');
+  recovering = false; $('newpw').hidden = true; $('np1').value = $('np2').value = '';
+  history.replaceState(null, '', location.pathname);
   show();
 };
 $('btnOut').onclick = async () => { await sb.auth.signOut(); show(); };
