@@ -162,6 +162,8 @@ details summary{cursor:pointer;color:#00d4aa;font-weight:bold;padding:4px 0}
             </div>
             <label>Expenses today (SAR)</label><input id="rExp" type="number" inputmode="decimal" value="0">
             <label>Issues</label><textarea id="rIssues" rows="2" placeholder="Any problem? Leave empty if none"></textarea>
+            <label class="scanbtn">📷 Add photos<input type="file" id="rFiles" accept="image/*" multiple hidden></label>
+            <div id="rPhotos"></div>
             <button id="btnReport">Save Report</button>
             <p id="rMsg" class="msg"></p>
           </div>
@@ -546,15 +548,43 @@ async function loadJobs() {
 let jT; $('jSearch').oninput = () => { clearTimeout(jT); jT = setTimeout(loadJobs, 400); };
 function alertRow(el, text) { const s = document.createElement('div'); s.className = 'small bad'; s.textContent = text; el.appendChild(s); }
 
+let rPending = [];
+$('rFiles').onchange = e => {
+  Array.from(e.target.files).forEach(f => rPending.push({ file: f, caption: '' }));
+  e.target.value = ''; renderRPhotos();
+};
+function renderRPhotos() {
+  const box = $('rPhotos'); box.innerHTML = '';
+  rPending.forEach((p, i) => {
+    const row = document.createElement('div'); row.className = 'grid2';
+    const cap = document.createElement('input'); cap.placeholder = 'Photo description (e.g. Akbrabiya site, 3 holes)'; cap.value = p.caption;
+    cap.oninput = () => { rPending[i].caption = cap.value; };
+    const del = document.createElement('button'); del.textContent = 'Remove'; del.type = 'button';
+    del.onclick = () => { rPending.splice(i, 1); renderRPhotos(); };
+    row.appendChild(cap); row.appendChild(del); box.appendChild(row);
+  });
+}
+function fmtTime(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 async function loadReports() {
   const { data, error } = await sb.from('daily_reports').select('*').order('report_date', {ascending:false}).order('id', {ascending:false}).limit(30);
   const ul = $('reports'); ul.innerHTML = '';
   if (error) { ul.textContent = 'Error: ' + error.message; return; }
   if (!data.length) empty(ul, 'No reports yet');
-  data.forEach(r => ul.appendChild(li((r.site || '-') + ' · ' + r.report_date,
-    Number(r.expenses_sar) ? sar(r.expenses_sar) + ' SAR' : '',
-    [r.work_done, r.team ? 'Team: ' + r.team : '', r.machine ? 'Machine: ' + r.machine : '', r.quantity ? 'Qty: ' + r.quantity : '',
-     r.issues ? '⚠️ ' + r.issues : ''].filter(Boolean).join(' · '), 'num warn')));
+  data.forEach(r => {
+    const el = li('🕒 ' + fmtTime(r.created_at) + ' · ' + (r.site || '-'), Number(r.expenses_sar) ? sar(r.expenses_sar) + ' SAR' : '',
+      [r.work_done, r.team ? 'Team: ' + r.team : '', r.machine ? 'Machine: ' + r.machine : '', r.quantity ? 'Qty: ' + r.quantity : '',
+       r.issues ? '⚠️ ' + r.issues : ''].filter(Boolean).join(' · '), 'num warn');
+    (r.photos || []).forEach(ph => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'small';
+      b.textContent = '📷 ' + (ph.caption || 'Photo') + ' · ' + fmtTime(ph.taken_at);
+      b.onclick = () => openPhoto(ph.path); el.appendChild(b);
+    });
+    ul.appendChild(el);
+  });
 }
 
 async function loadMoney() {
@@ -772,14 +802,25 @@ $('btnJob').onclick = async () => {
 $('btnReport').onclick = async () => {
   if (!$('rSite').value.trim() && !$('rWork').value.trim()) return setMsg('rMsg', 'Write the site or work done');
   setMsg('rMsg', 'Saving...', true);
+  const photos = [];
+  try {
+    for (let i = 0; i < rPending.length; i++) {
+      const p = rPending[i];
+      const blob = await shrink(p.file, 2000);
+      const path = 'reports/' + new Date().toISOString().slice(0, 7) + '/' + Date.now() + '_' + i + '.jpg';
+      const up = await sb.storage.from('invoices').upload(path, blob, { contentType: 'image/jpeg' });
+      if (up.error) return setMsg('rMsg', 'Photo upload error: ' + up.error.message);
+      photos.push({ path, caption: p.caption.trim() || '-', taken_at: new Date().toISOString() });
+    }
+  } catch (e) { return setMsg('rMsg', 'Photo error: ' + e.message); }
   const { error } = await sb.from('daily_reports').insert({
     report_date: $('rDate').value || null, site: $('rSite').value.trim() || '-', work_done: $('rWork').value.trim() || '-',
     team: teamValue('rTeam') || '-', machine: $('rMachine').value.trim() || '-', quantity: $('rQty').value.trim() || '-',
-    expenses_sar: Number($('rExp').value || 0), issues: $('rIssues').value.trim() || '-'
+    expenses_sar: Number($('rExp').value || 0), issues: $('rIssues').value.trim() || '-', photos
   });
   if (error) return setMsg('rMsg', 'Error: ' + error.message);
   ['rSite','rWork','rMachine','rQty','rIssues'].forEach(id => $(id).value = '');
-  $('rExp').value = 0; clearTeam('rTeam');
+  $('rExp').value = 0; clearTeam('rTeam'); rPending = []; renderRPhotos();
   setMsg('rMsg', '✅ Saved', true);
   loadReports();
 };
