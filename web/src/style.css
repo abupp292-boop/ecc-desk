@@ -90,3 +90,18 @@ button { font-family: inherit; cursor: pointer; }
 .vr .t { min-width: 0; overflow-wrap: anywhere; }
 .vr b { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--accent); }
 .vlist .s { color: var(--muted); font-size: 14px; margin-top: 4px; overflow-wrap: anywhere; }
+
+/* Customer balances */
+.bal-title { margin: 0 0 10px; }
+.bal-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.bal-tile { border: 0; border-radius: 14px; padding: 12px 6px; color: #fff; text-align: center; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,.35); }
+.bal-tile b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.bal-tile span { display: block; font-size: 12px; opacity: .92; margin-top: 3px; }
+.bal-tile.on { outline: 3px solid #fff; }
+.bal-green { background: linear-gradient(145deg, #1fbf75, #0d7a49); }
+.bal-yellow { background: linear-gradient(145deg, #f5b41c, #b97a00); }
+.bal-red { background: linear-gradient(145deg, #ff6b6b, #b8283a); }
+#bList li { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+#bList .n { min-width: 0; overflow-wrap: anywhere; }
+#bList .m { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+#bList .amt { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }

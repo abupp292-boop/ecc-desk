@@ -44,6 +44,19 @@
 
     <div id="alerts"></div>
 
+    <!-- Money owed per customer (owner only) -->
+    <div class="card owner-only" hidden>
+      <h2 class="bal-title">💼 Customers: paid or owed</h2>
+      <div class="bal-tiles">
+        <button class="bal-tile bal-green" data-bal="paid"><b id="bPaid">–</b><span>Fully paid</span></button>
+        <button class="bal-tile bal-yellow" data-bal="part"><b id="bPart">–</b><span>Partly paid</span></button>
+        <button class="bal-tile bal-red" data-bal="owed"><b id="bOwed">–</b><span>Still owed</span></button>
+      </div>
+      <p class="small" id="bTotals"></p>
+      <input id="bSearch" type="search" placeholder="🔍 Search customer or mobile" autocomplete="off">
+      <ul id="bList" class="vlist"></ul>
+    </div>
+
     <div class="today card">
       <div><b id="sJobs">–</b><span>Jobs today</span></div>
       <div><b id="sOrders">–</b><span>Open orders</span></div>

@@ -294,6 +294,71 @@ async function search() {
 }
 
 // ---------- Login ----------
+// ---------- Customer balances (owner only, read only) ----------
+async function readAll(table, cols, filter) {
+  let out = [];
+  for (let from = 0; ; from += 1000) {
+    let q = sb.from(table).select(cols).range(from, from + 999);
+    if (filter) q = filter(q);
+    const { data, error } = await q;
+    if (error) throw error;
+    out = out.concat(data);
+    if (data.length < 1000) return out;
+  }
+}
+let balRows = [], balFilter = 'owed';
+const money = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function loadBalances() {
+  try {
+    const [cust, jobs, pays] = await Promise.all([
+      readAll('customers', 'id, company_name, phone'),
+      readAll('jobs', 'customer_id, total'),
+      readAll('payments', 'customer_id, amount'),
+    ]);
+    const billed = {}, paid = {};
+    jobs.forEach((j) => { if (j.customer_id) billed[j.customer_id] = (billed[j.customer_id] || 0) + Number(j.total || 0); });
+    pays.forEach((p) => { if (p.customer_id) paid[p.customer_id] = (paid[p.customer_id] || 0) + Number(p.amount || 0); });
+    balRows = cust.filter((c) => billed[c.id]).map((c) => {
+      const b = billed[c.id] || 0, p = paid[c.id] || 0;
+      const state = p >= b - 1 ? 'paid' : p > 0 ? 'part' : 'owed';
+      return { name: c.company_name || '—', phone: c.phone || '', billed: b, paid: p, owe: Math.max(b - p, 0), state };
+    });
+    const count = (st) => balRows.filter((r) => r.state === st).length;
+    $('bPaid').textContent = count('paid');
+    $('bPart').textContent = count('part');
+    $('bOwed').textContent = count('owed');
+    const owed = balRows.reduce((a, r) => a + r.owe, 0);
+    $('bTotals').textContent = 'Still owed in total: ' + money(owed) + ' SAR · customers with jobs: ' + balRows.length;
+    renderBal();
+  } catch (e) {
+    $('bTotals').textContent = 'Could not load: ' + (e.message || e);
+  }
+}
+
+function renderBal() {
+  const q = $('bSearch').value.trim().toLowerCase();
+  const list = balRows
+    .filter((r) => r.state === balFilter)
+    .filter((r) => !q || r.name.toLowerCase().includes(q) || r.phone.includes(q))
+    .sort((a, b) => b.owe - a.owe || a.name.localeCompare(b.name));
+  const ul = $('bList'); ul.innerHTML = '';
+  document.querySelectorAll('.bal-tile').forEach((t) => t.classList.toggle('on', t.dataset.bal === balFilter));
+  list.slice(0, 200).forEach((r) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="n"></span><span class="amt"></span>';
+    li.querySelector('.n').textContent = r.name;
+    const sub = document.createElement('span'); sub.className = 'm';
+    sub.textContent = (r.phone ? r.phone + ' · ' : '') + 'billed ' + money(r.billed) + ' · paid ' + money(r.paid);
+    li.querySelector('.n').appendChild(sub);
+    li.querySelector('.amt').textContent = balFilter === 'paid' ? '✓' : money(balFilter === 'part' ? r.owe : r.owe);
+    ul.appendChild(li);
+  });
+  if (!list.length) ul.textContent = 'No customers in this group.';
+}
+document.querySelectorAll('.bal-tile').forEach((t) => t.onclick = () => { balFilter = t.dataset.bal; renderBal(); });
+$('bSearch').oninput = renderBal;
+
 async function show() {
   const { data: { session } } = await sb.auth.getSession();
   $('login').hidden = !!session;
@@ -307,6 +372,7 @@ async function show() {
   renderTiles();
   route();
   loadNumbers();
+  if (isOwner) loadBalances();
 }
 
 $('login').onsubmit = async (e) => {
