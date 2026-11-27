@@ -28,7 +28,7 @@ const SECTIONS = {
     items: [
       { ico: '🏗️', name: 'Jobs', sub: 'All jobs, status, new job', href: () => oldApp('jobs') },
       { ico: '📑', name: 'Orders', sub: 'Quotations, POs, invoices', href: () => oldApp('orders') },
-      { ico: '📋', name: 'Daily report', sub: 'Evening site report', href: () => oldApp('report', { open: 1 }) },
+      { ico: '📋', name: 'Daily reports', sub: 'Read: by month, site, crew', href: () => '#daily' },
       { ico: '🏢', name: 'Customers', sub: 'Ledger by customer and mobile', href: () => oldApp('customers') },
     ],
   },
@@ -106,7 +106,7 @@ function renderSection(key) {
 function route() {
   const key = location.hash.slice(1);
   const sec = SECTIONS[key] && (!SECTIONS[key].owner || isOwner) ? key : '';
-  const view = VIEWS[key] && isOwner ? key : '';
+  const view = VIEWS[key] && (isOwner || VIEWS[key].any) ? key : '';
   const pwd = key === 'password';
   $('home').hidden = !!(sec || view || pwd);
   $('section').hidden = !sec;
@@ -138,6 +138,7 @@ $('vBack').onclick = () => { location.hash = 'money'; };
 
 // ---------- Owner-only money records (read only): Bank, Cash, VAT invoices ----------
 const VIEWS = {
+  daily: { title: '📋 Daily reports', table: 'daily_reports', date: 'report_date', any: true, daily: true },
   bank: { title: '🏦 Bank', table: 'bank_entries', date: 'entry_date' },
   cash: { title: '👛 Cash', table: 'cash_entries', date: 'entry_date' },
   vat: { title: '🧮 VAT invoices', table: 'vat_invoices', date: 'inv_date', vat: true },
@@ -149,6 +150,8 @@ async function openView(key) {
   const v = VIEWS[key];
   curView = key;
   $('vTitle').textContent = v.title;
+  $('vBack').textContent = v.daily ? '← Home' : '← Money';
+  $('vBack').onclick = () => { location.hash = v.daily ? '' : 'money'; };
   $('vQ').value = '';
   if (!v.month) {
     // start on the newest month that has records
@@ -184,10 +187,15 @@ function stat(label, value, cls) {
 function renderView() {
   const v = VIEWS[curView];
   const q = $('vQ').value.trim().toLowerCase();
-  const rows = viewRows.filter((r) => !q || [r.note, r.party, r.inv_no, r.vat_no, r.type].some((x) => (x || '').toLowerCase().includes(q)));
+  const rows = viewRows.filter((r) => !q || [r.note, r.party, r.inv_no, r.vat_no, r.type, r.site, r.team, r.machine, r.work_done, r.issues].some((x) => (x || '').toLowerCase().includes(q)));
   const sum = (list, f) => list.reduce((a, r) => a + Number(r[f] || 0), 0);
   const stats = $('vStats'); stats.innerHTML = '';
-  if (v.vat) {
+  if (v.daily) {
+    const crew = new Set(rows.flatMap((r) => String(r.team || '').split(',').map((x) => x.trim()).filter(Boolean)));
+    stats.appendChild(stat('Reports', rows.length));
+    stats.appendChild(stat('Crew names', crew.size));
+    stats.appendChild(stat('Expenses SAR', sar2(sum(rows, 'expenses_sar'))));
+  } else if (v.vat) {
     const sales = rows.filter((r) => r.type === 'Sales'), buy = rows.filter((r) => r.type !== 'Sales');
     stats.appendChild(stat('Sales (incl. VAT)', sar(sum(sales, 'total'))));
     stats.appendChild(stat('Purchases & expenses', sar(sum(buy, 'total')), 'out'));
@@ -203,6 +211,14 @@ function renderView() {
     const li = document.createElement('li');
     li.innerHTML = '<div class="vr"><span class="t"></span><b></b></div><div class="s"></div>';
     const isOut = v.vat ? r.type !== 'Sales' : r.kind === 'out';
+    if (v.daily) {
+      li.innerHTML = '<div class="vr"><span class="t"></span><b></b></div><div class="s"></div>';
+      li.querySelector('.t').textContent = (r.site || 'Site not written');
+      li.querySelector('b').textContent = r.quantity || '';
+      li.querySelector('.s').textContent = [r.report_date, r.team, r.machine, r.work_done, r.issues ? 'Issue: ' + r.issues : ''].filter(Boolean).join(' · ');
+      ul.appendChild(li);
+      return;
+    }
     li.querySelector('.t').textContent = v.vat ? (r.party || r.type) : (r.note || (isOut ? 'Out' : 'In'));
     const amt = li.querySelector('b');
     amt.textContent = (isOut ? '− ' : '+ ') + sar2(v.vat ? r.total : r.amount);
